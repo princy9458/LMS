@@ -1,0 +1,86 @@
+{
+  "courses": [
+    {
+      "id": "course_001",
+      "title": "Mastering Next.js E-commerce Integration",
+      "slug": "nextjs-ecommerce-mastery",
+      "description": "Learn to build high-performance LMS systems as plugins within existing stores.",
+      "price": 49.99,
+      "category": "Development",
+      "level": "Intermediate",
+      "sections": [
+        {
+          "title": "Module 1: Plugin Foundations",
+          "lessons": [
+            {
+              "title": "Understanding Plugin Architecture",
+              "type": "video",
+              "duration": 600,
+              "content": "https://cdn.lms.com/vids/intro.mp4"
+            },
+            {
+              "title": "Setting Up the MongoDB Schema",
+              "type": "text",
+              "content": "In this lesson, we define the core collections..."
+            }
+          ],
+          "quizzes": [
+            {
+              "title": "Architecture Baseline Quiz",
+              "passingScore": 80,
+              "questions": [
+                {
+                  "text": "What is the primary integration point for the LMS plugin?",
+                  "options": ["Shared Database", "External API", "Hard-coded values", "None"],
+                  "correctAnswer": "Shared Database",
+                  "explanation": "Sharing the database allows for SSO and unified data tracking."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "opportunities": {
+    "jobs": [
+      {
+        "id": "job_101",
+        "title": "Senior Frontend Engineer (Next.js)",
+        "company": "TechStream Systems",
+        "salary": "$120k - $150k",
+        "location": "Remote",
+        "requirements": ["Next.js", "TypeScript", "Redux"]
+      }
+    ],
+    "internships": [
+      {
+        "id": "int_201",
+        "title": "Junior Fullstack Intern",
+        "company": "StartupGen",
+        "stipend": "$500/mo",
+        "duration": "3 Months",
+        "mode": "Remote"
+      }
+    ]
+  },
+  "students": [
+    {
+      "id": "std_501",
+      "name": "Alex Dev",
+      "email": "alex@example.com",
+      "progress": {
+        "course_001": 75
+      },
+      "skills": ["JavaScript", "React", "Next.js"]
+    }
+  ],
+  "employers": [
+    {
+      "id": "emp_901",
+      "name": "TechStream Systems",
+      "industry": "Software",
+      "verified": true
+    }
+  ]
+}

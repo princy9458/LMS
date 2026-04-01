@@ -1,0 +1,17 @@
+import createMiddleware from 'next-intl/middleware';
+
+export default createMiddleware({
+  // A list of all locales that are supported
+  locales: ['en', 'hi', 'fr', 'es'],
+
+  // Used when no locale matches
+  defaultLocale: 'en',
+  
+  // SEO friendly routes
+  localePrefix: 'always'
+});
+
+export const config = {
+  // Match only internationalized pathnames
+  matcher: ['/', '/(hi|en|fr|es)/:path*', '/((?!api|_next|_vercel|.*\\..*).*)']
+};
