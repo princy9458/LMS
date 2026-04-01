@@ -2,6 +2,12 @@ import mongoose, { Schema, Document } from 'mongoose';
 import { getTranslatedField, hasEnglishTranslation, localizedTextField } from '@/plugins/lms/models/localizedField';
 import type { LocalizedText } from '@/plugins/lms/models/localizedField';
 
+export interface ICourseAttribute {
+  key: string;
+  language: string;
+  value: string;
+}
+
 export interface ICourse extends Document {
   tenant?: mongoose.Types.ObjectId;
   title: LocalizedText;
@@ -21,6 +27,7 @@ export interface ICourse extends Document {
   lessons?: mongoose.Types.ObjectId[];
   totalLessons?: number;
   skillsEarned?: string[];
+  attributes?: ICourseAttribute[];
   isPublished: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -58,6 +65,11 @@ const CourseSchema: Schema = new Schema({
   lessons: [{ type: Schema.Types.ObjectId, ref: 'Lesson' }],
   totalLessons: { type: Number, default: 0 },
   skillsEarned: [{ type: String, trim: true }],
+  attributes: [{
+    key: { type: String, required: true },
+    language: { type: String, required: true },
+    value: { type: String, required: true }
+  }],
   isPublished: { type: Boolean, default: false }
 }, { timestamps: true });
 

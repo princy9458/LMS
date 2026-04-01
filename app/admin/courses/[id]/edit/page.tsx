@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter, useParams } from 'next/navigation';
-import { BookOpen, AlertCircle, Save, Loader2, Image as ImageIcon } from 'lucide-react';
+import { BookOpen, AlertCircle, Save, Loader2, Image as ImageIcon, Trash2, Zap, Plus } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { CONTENT_LANGUAGES } from '@/config/contentLanguages';
@@ -13,6 +13,8 @@ const createLocalizedValues = (translations: Record<string, string> = {}) =>
   Object.fromEntries(
     CONTENT_LANGUAGES.map((language) => [language.code, translations[language.code] || ''])
   );
+
+type Attribute = { key: string; value: Record<string, string> };
 
 export default function AdminCourseEditPage() {
   const router = useRouter();
@@ -32,6 +34,7 @@ export default function AdminCourseEditPage() {
     difficulty: 'Beginner',
     totalLessons: 0,
     skillsEarned: '',
+    attributes: [] as Attribute[],
   });
 
   const [loading, setLoading] = useState(true);
@@ -61,6 +64,10 @@ export default function AdminCourseEditPage() {
             difficulty: course.difficulty || 'Beginner',
             totalLessons: course.totalLessons || 0,
             skillsEarned: course.skillsEarned ? course.skillsEarned.join(', ') : '',
+            attributes: Array.isArray(course.attributes) ? course.attributes.map((attr: any) => ({
+              key: attr.key,
+              value: createLocalizedValues(attr.value)
+            })) : [],
           });
         } else {
           throw new Error(data?.error || 'Course not found');
@@ -89,7 +96,8 @@ export default function AdminCourseEditPage() {
       const payload = {
         ...formData,
         skillsEarned: skillsArray,
-        totalLessons: parseInt(formData.totalLessons.toString()) || 0
+        totalLessons: parseInt(formData.totalLessons.toString()) || 0,
+        attributes: formData.attributes
       };
 
       const response = await fetch(`/api/courses/${id}`, {
@@ -132,6 +140,36 @@ export default function AdminCourseEditPage() {
         ...prev,
         [field]: locale === 'en' ? autofillHindiTranslation(nextFieldValue) : nextFieldValue,
       };
+    });
+  };
+
+  const handleAddAttribute = () => {
+    setFormData(prev => ({
+      ...prev,
+      attributes: [...prev.attributes, { key: '', value: createLocalizedValues() }]
+    }));
+  };
+
+  const handleRemoveAttribute = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      attributes: prev.attributes.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleAttributeKeyChange = (index: number, key: string) => {
+    setFormData(prev => {
+      const newAttributes = [...prev.attributes];
+      newAttributes[index].key = key;
+      return { ...prev, attributes: newAttributes };
+    });
+  };
+
+  const handleAttributeValueChange = (index: number, locale: string, value: string) => {
+    setFormData(prev => {
+      const newAttributes = [...prev.attributes];
+      newAttributes[index].value[locale] = value;
+      return { ...prev, attributes: newAttributes };
     });
   };
 
@@ -265,6 +303,68 @@ export default function AdminCourseEditPage() {
                 onChange={handleChange}
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
               />
+            </div>
+
+            <div className="space-y-4 md:col-span-2 pt-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <label className="text-sm font-semibold text-zinc-900 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-500" /> Course Attributes
+                  </label>
+                  <p className="text-xs text-zinc-500 font-normal">Add custom metadata like Duration, Prerequisites, or Certification type.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddAttribute}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-500 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 rounded-lg transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Attribute
+                </button>
+              </div>
+
+              {formData.attributes.length > 0 ? (
+                <div className="space-y-4">
+                  {formData.attributes.map((attr, index) => (
+                    <div key={index} className="rounded-2xl border border-zinc-200 bg-zinc-50/40 p-5 space-y-4 relative overflow-hidden group">
+                      <div className="flex items-center justify-between border-b border-zinc-200/60 pb-3">
+                        <input
+                          placeholder="Attribute Name (e.g. Duration)"
+                          value={attr.key}
+                          onChange={(e) => handleAttributeKeyChange(index, e.target.value)}
+                          className="bg-transparent border-none p-0 text-sm font-bold text-zinc-900 placeholder:text-zinc-400 focus:ring-0 w-full"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAttribute(index)}
+                          className="text-zinc-400 hover:text-red-500 transition-colors p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {CONTENT_LANGUAGES.map((language) => (
+                          <div key={language.code} className="space-y-1.5">
+                            <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 flex items-center gap-1">
+                              {language.label}
+                            </label>
+                            <input
+                              value={attr.value[language.code]}
+                              onChange={(e) => handleAttributeValueChange(index, language.code, e.target.value)}
+                              placeholder={`Value in ${language.label}`}
+                              className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="border-2 border-dashed border-zinc-200 rounded-2xl p-8 text-center bg-zinc-50/30">
+                  <p className="text-sm text-zinc-500">No custom attributes added yet. Click "Add Attribute" to begin.</p>
+                </div>
+              )}
             </div>
           </div>
 
