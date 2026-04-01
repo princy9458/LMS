@@ -246,6 +246,17 @@ export function localizeCourseDocument(course, locale = DEFAULT_LOCALE) {
       titleResult.localeUsed === descriptionResult.localeUsed
         ? titleResult.localeUsed
         : DEFAULT_LOCALE,
+    attributes: Array.isArray(plainCourse.attributes)
+      ? Object.values(
+          plainCourse.attributes.reduce((acc, attr) => {
+            if (!acc[attr.key]) {
+              acc[attr.key] = { key: attr.key, value: {} };
+            }
+            acc[attr.key].value[attr.language] = attr.value;
+            return acc;
+          }, {})
+        )
+      : [],
   };
 }
 
@@ -353,11 +364,33 @@ export function localizeQuizDocument(quiz, locale = DEFAULT_LOCALE) {
 }
 
 export function prepareCourseWritePayload(payload = {}, existingCourse = null) {
-  return {
+  const basePayload = {
     ...payload,
     title: mergeLocalizedField(payload.title, existingCourse?.title) ?? payload.title,
     description: mergeLocalizedField(payload.description, existingCourse?.description) ?? payload.description,
   };
+
+  if (payload.attributes && Array.isArray(payload.attributes)) {
+    const formattedAttributes = [];
+    payload.attributes.forEach((attr) => {
+      const key = typeof attr.key === 'string' ? attr.key.trim() : '';
+      if (!key || !attr.value || typeof attr.value !== 'object') return;
+
+      Object.entries(attr.value).forEach(([lang, val]) => {
+        const value = typeof val === 'string' ? val.trim() : '';
+        if (value) {
+          formattedAttributes.push({
+            key,
+            language: lang,
+            value,
+          });
+        }
+      });
+    });
+    basePayload.attributes = formattedAttributes;
+  }
+
+  return basePayload;
 }
 
 export function prepareLessonWritePayload(payload = {}, existingLesson = null) {
