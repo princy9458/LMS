@@ -12,6 +12,7 @@
     "verify:i18n": "node scripts/verifyMultilingual.mjs"
   },
   "dependencies": {
+    "next": "^16.1.6",
     "@dnd-kit/core": "^6.1.0",
     "@dnd-kit/modifiers": "^7.0.0",
     "@dnd-kit/sortable": "^8.0.0",
@@ -37,9 +38,11 @@
     "recharts": "^3.8.0",
     "stripe": "^14.25.0",
     "tailwind-merge": "^2.2.2",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@types/uuid": "^10.0.0",
     "@types/ioredis": "^5.0.0",
     "@types/node": "^20",
     "@types/react": "^18",
