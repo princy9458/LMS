@@ -70,7 +70,7 @@ export const CareerPathCard: React.FC<CareerPathCardProps> = ({
                 {recommendedCourses.slice(0, 2).map((course) => (
                   <Link 
                     key={course._id}
-                    href={`/courses/${course._id}`}
+                    href={`/courses/${course.slug || course._id}`}
                     className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors group/link"
                   >
                     <GraduationCap size={14} className="text-muted-foreground group-hover/link:text-primary" />

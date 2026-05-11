@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/dbConnect';
+import mongoose from 'mongoose';
 import Lesson from '@/modules/lms/models/Lesson';
 import {
   getRequestedLocale,
-  localizeLessonDocument,
   prepareLessonWritePayload,
 } from '@/modules/lms/utils/courseLocalization';
+import { getLessonTreeById, normalizeLessonTree } from '@/modules/lms/utils/learningTree';
 
 export async function GET(request, { params }) {
   try {
     await dbConnect();
     const { id } = await params;
-    const lesson = await Lesson.findById(id);
+    const lesson = await getLessonTreeById(id);
     
     if (!lesson) {
       return NextResponse.json(
@@ -20,7 +21,7 @@ export async function GET(request, { params }) {
       );
     }
 
-    const normalized = localizeLessonDocument(lesson, getRequestedLocale(request));
+    const normalized = normalizeLessonTree(lesson, getRequestedLocale(request));
     normalized.courseId = normalized.courseId || normalized.course;
     normalized.unlockLogic = normalized.unlockLogic || {
       type: normalized.unlockType || 'none',
@@ -42,6 +43,12 @@ export async function PUT(request, { params }) {
     await dbConnect();
     const body = await request.json();
     const { id } = await params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid lesson ID' },
+        { status: 400 }
+      );
+    }
     const existingLesson = await Lesson.findById(id);
     if (!existingLesson) {
       return NextResponse.json(
@@ -57,12 +64,17 @@ export async function PUT(request, { params }) {
       unlockAfterDays: body.unlockAfterDays ?? body.unlockLogic?.daysFromEnrollment
     }, existingLesson);
     
-    const lesson = await Lesson.findByIdAndUpdate(id, payload, {
-      new: true,
-      runValidators: true,
-    });
+    const lesson = await Lesson.findById(id);
+    if (!lesson) {
+      return NextResponse.json(
+        { success: false, error: 'Lesson not found' },
+        { status: 404 }
+      );
+    }
+    lesson.set(payload);
+    await lesson.save();
 
-    return NextResponse.json({ success: true, data: localizeLessonDocument(lesson, getRequestedLocale(request)) });
+    return NextResponse.json({ success: true, data: normalizeLessonTree(lesson, getRequestedLocale(request)) });
   } catch (error) {
     console.error('Error updating lesson:', error);
     return NextResponse.json(
@@ -76,6 +88,12 @@ export async function DELETE(request, { params }) {
   try {
     await dbConnect();
     const { id } = await params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid lesson ID' },
+        { status: 400 }
+      );
+    }
     const lesson = await Lesson.findByIdAndDelete(id);
     
     if (!lesson) {

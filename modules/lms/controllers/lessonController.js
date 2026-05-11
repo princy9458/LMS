@@ -8,6 +8,7 @@ import {
   prepareLessonWritePayload,
 } from '@/modules/lms/utils/courseLocalization';
 import mongoose from 'mongoose';
+import { normalizeLessonTree } from '@/modules/lms/utils/learningTree';
 
 export async function listLessons(request) {
   await dbConnect();
@@ -19,7 +20,7 @@ export async function listLessons(request) {
     ? await lessonService.listLessonsByCourse(courseId)
     : await lessonService.listLessons();
   const normalized = lessons.map((lesson) => {
-    const item = localizeLessonDocument(lesson, locale);
+    const item = normalizeLessonTree(lesson, locale);
     item.courseId = item.courseId || item.course;
     item.unlockLogic = item.unlockLogic || {
       type: item.unlockType || 'none',
@@ -47,7 +48,7 @@ export async function getLesson(request, { params }) {
     return json({ success: false, error: 'Lesson not found' }, 404);
   }
 
-  const item = localizeLessonDocument(lesson, getRequestedLocale(request));
+  const item = normalizeLessonTree(lesson, getRequestedLocale(request));
   item.courseId = item.courseId || item.course;
   item.unlockLogic = item.unlockLogic || {
     type: item.unlockType || 'none',
@@ -74,11 +75,9 @@ export async function createLesson(request) {
   const payload = {
     ...prepareLessonWritePayload({
       title: body.title,
-      content: body.content,
-      subtitles: body.subtitles,
+      description: body.description,
     }),
     course: courseId,
-    videoUrl: body.videoUrl,
     order: Number(body.order || 0),
     unlockType,
     unlockAfterDays
@@ -113,9 +112,7 @@ export async function updateLesson(request, { params }) {
   const payload = prepareLessonWritePayload({
     course: body.courseId || body.course,
     title: body.title,
-    content: body.content,
-    subtitles: body.subtitles,
-    videoUrl: body.videoUrl,
+    description: body.description,
     order: Number(body.order || 0),
     unlockType,
     unlockAfterDays

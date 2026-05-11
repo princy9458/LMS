@@ -1,21 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/dbConnect';
-import { lessonService } from '@/plugins/lms/services/lessonService';
-import { requireStudent } from '@/plugins/lms/middleware/authMiddleware';
-import { getRequestedLocale, localizeLessonDocument } from '@/modules/lms/utils/courseLocalization';
+import { getRequestedLocale } from '@/modules/lms/utils/courseLocalization';
+import { getLessonTreeById, normalizeLessonTree } from '@/modules/lms/utils/learningTree';
 
 export async function GET(request: NextRequest, { params }: { params: { lessonId: string } }) {
   try {
-    const auth = await requireStudent(request);
-    if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
-
     const { lessonId } = params;
     await dbConnect();
-    const lesson = await lessonService.getLessonDetails(auth.user.userId, lessonId);
+    const lesson = await getLessonTreeById(lessonId);
+
+    if (!lesson) {
+      return NextResponse.json({ success: false, error: 'Lesson not found', data: null }, { status: 404 });
+    }
+
     const locale = getRequestedLocale(request) as 'en' | 'hi' | 'fr' | 'es';
-    
-    return NextResponse.json(localizeLessonDocument(lesson, locale));
+
+    const normalized = normalizeLessonTree(lesson, locale);
+    return NextResponse.json({ success: true, lesson: normalized, data: normalized });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Error fetching lesson detail:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Server Error', data: null }, { status: 500 });
   }
 }

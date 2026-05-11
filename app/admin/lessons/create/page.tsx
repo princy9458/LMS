@@ -2,15 +2,26 @@
 
 import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { PlaySquare, AlertCircle, Plus, Loader2, Video, Lock } from 'lucide-react';
+import { PlaySquare, AlertCircle, Plus, Loader2, Lock } from 'lucide-react';
 import Link from 'next/link';
-import { SUPPORTED_LANGUAGES } from '@/config/languages';
 import { CONTENT_LANGUAGES } from '@/config/contentLanguages';
+import AdminLocaleSelector from '@/components/admin/AdminLocaleSelector';
 import { autofillHindiTranslation } from '@/lib/hindiTranslation';
 import { getContentLocale, getLocaleFromPathname, getLocalePath } from '@/lib/i18n';
+import { getLocaleCompletion } from '@/lib/adminLocale';
+import { useAdminLocale } from '@/components/admin/AdminLocaleProvider';
 
 const createLocalizedValues = () =>
   Object.fromEntries(CONTENT_LANGUAGES.map((language) => [language.code, '']));
+
+const toSlug = (value: string) =>
+  String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
 export default function AdminLessonCreatePage() {
   const router = useRouter();
@@ -18,21 +29,30 @@ export default function AdminLessonCreatePage() {
   const locale = getLocaleFromPathname(pathname);
   const contentLocale = getContentLocale(locale);
   const adminLessonsPath = getLocalePath(locale, '/admin/lessons');
+  const { locale: activeLocale, setLocale } = useAdminLocale();
   const [courses, setCourses] = useState<any[]>([]);
   
   const [formData, setFormData] = useState({
     courseId: '',
     title: createLocalizedValues(),
-    videoUrl: '',
+    description: createLocalizedValues(),
+    slug: '',
     order: 1,
     unlockType: 'completion',
     unlockDays: 0,
-    subtitles: Object.fromEntries(SUPPORTED_LANGUAGES.map((language) => [language.code, ''])),
   });
+  const [slugEdited, setSlugEdited] = useState(false);
   
   const [loading, setLoading] = useState(false);
   const [fetchingCourses, setFetchingCourses] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const activeLanguage = CONTENT_LANGUAGES.find((language) => language.code === activeLocale) || CONTENT_LANGUAGES[0];
+
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[contentLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
 
   useEffect(() => {
     const loadCourses = async () => {
@@ -69,8 +89,8 @@ export default function AdminLessonCreatePage() {
       const payload = {
         courseId: formData.courseId,
         title: formData.title,
-        videoUrl: formData.videoUrl,
-        subtitles: formData.subtitles,
+        description: formData.description,
+        slug: formData.slug || toSlug(formData.title.en || ''),
         order: parseInt(formData.order.toString()) || 1,
         unlockLogic: {
           type: formData.unlockType,
@@ -97,7 +117,7 @@ export default function AdminLessonCreatePage() {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
@@ -114,19 +134,27 @@ export default function AdminLessonCreatePage() {
 
       return {
         ...prev,
+        slug: locale === 'en' && !slugEdited ? toSlug(value) : prev.slug,
         title: locale === 'en' ? autofillHindiTranslation(nextTitle) : nextTitle,
       };
     });
   };
 
-  const handleSubtitleChange = (locale: string, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      subtitles: {
-        ...prev.subtitles,
+  const handleLocalizedDescriptionChange = (
+    locale: (typeof CONTENT_LANGUAGES)[number]['code'],
+    value: string
+  ) => {
+    setFormData((prev) => {
+      const nextDescription = {
+        ...prev.description,
         [locale]: value,
-      },
-    }));
+      };
+
+      return {
+        ...prev,
+        description: locale === 'en' ? autofillHindiTranslation(nextDescription) : nextDescription,
+      };
+    });
   };
 
   return (
@@ -170,65 +198,62 @@ export default function AdminLessonCreatePage() {
                   <option value="">No courses available. Create a course first.</option>
                 ) : (
                   courses.map(course => (
-                    <option key={course._id} value={course._id}>{course.title}</option>
+                    <option key={course._id} value={course._id}>{getDisplayTitle(course.title)}</option>
                   ))
                 )}
               </select>
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-semibold text-zinc-900">Multilingual Lesson Title</label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {CONTENT_LANGUAGES.map((language) => (
-                  <div key={language.code} className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                      {language.label}
-                    </label>
-                    <input
-                      required={language.code === 'en'}
-                      value={formData.title[language.code] || ''}
-                      onChange={(e) => handleLocalizedTitleChange(language.code, e.target.value)}
-                      placeholder={`Lesson title (${language.label})`}
-                      className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                    />
+              <AdminLocaleSelector
+                value={activeLocale}
+                onChange={setLocale}
+                completion={getLocaleCompletion(formData.title)}
+              />
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-zinc-900">Lesson Title ({activeLanguage.label})</label>
+                  <input
+                    required={activeLocale === 'en'}
+                    value={formData.title[activeLocale] || ''}
+                    onChange={(e) => handleLocalizedTitleChange(activeLocale, e.target.value)}
+                    placeholder={`Lesson title (${activeLanguage.label})`}
+                    className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-zinc-900">Lesson Description ({activeLanguage.label})</label>
+                  <textarea
+                    required={activeLocale === 'en'}
+                    value={formData.description[activeLocale] || ''}
+                    onChange={(e) => handleLocalizedDescriptionChange(activeLocale, e.target.value)}
+                    placeholder="Write a short summary about this lesson..."
+                    rows={4}
+                    maxLength={500}
+                    className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none"
+                  />
+                  <div className="flex justify-end">
+                    <span className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider">
+                      {(formData.description[activeLocale] || '').length}/500 characters
+                    </span>
                   </div>
-                ))}
+                </div>
               </div>
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-semibold text-zinc-900">Video URL <span className="text-zinc-500 font-normal">(YouTube, Vimeo, MP4)</span></label>
-              <div className="flex relative">
-                <Video className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 w-5 h-5" />
-                <input
-                  name="videoUrl"
-                  type="url"
-                  value={formData.videoUrl}
-                  onChange={handleChange}
-                  placeholder="https://youtu.be/..."
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-11 pr-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4 md:col-span-2">
-              <label className="text-sm font-semibold text-zinc-900">Subtitle Files</label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {SUPPORTED_LANGUAGES.map((language) => (
-                  <div key={language.code} className="space-y-2">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                      {language.label}
-                    </label>
-                    <input
-                      type="url"
-                      value={formData.subtitles[language.code] || ''}
-                      onChange={(e) => handleSubtitleChange(language.code, e.target.value)}
-                      placeholder={`https://example.com/subtitles-${language.code}.vtt`}
-                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                    />
-                  </div>
-                ))}
-              </div>
+              <label className="text-sm font-semibold text-zinc-900">Slug</label>
+              <input
+                name="slug"
+                value={formData.slug}
+                onChange={(e) => {
+                  setSlugEdited(true);
+                  setFormData((prev) => ({ ...prev, slug: toSlug(e.target.value) }));
+                }}
+                placeholder="introduction-to-ai"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-mono"
+              />
             </div>
 
             <div className="space-y-2">

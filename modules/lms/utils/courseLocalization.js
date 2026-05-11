@@ -1,5 +1,6 @@
 import { CONTENT_LANGUAGE_CODES } from '@/config/contentLanguages';
 import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGE_CODES, createEmptyLanguageRecord } from '@/config/languages';
+import { prepareSlugWritePayload } from '@/modules/lms/utils/slug';
 
 const SUPPORTED_LOCALES = [...SUPPORTED_LANGUAGE_CODES];
 const CONTENT_LOCALES = [...CONTENT_LANGUAGE_CODES];
@@ -51,6 +52,90 @@ function readLocaleFromReferer(request) {
 
 function createEmptyLocalizedField() {
   return createEmptyLanguageRecord('');
+}
+
+function normalizeCmsTranslations(value) {
+  if (!isPlainObject(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce((acc, [locale, block]) => {
+    if (!isPlainObject(block)) {
+      return acc;
+    }
+
+    acc[locale] = Object.entries(block).reduce((blockAcc, [key, fieldValue]) => {
+      if (typeof fieldValue !== 'string') {
+        return blockAcc;
+      }
+
+      const normalized = fieldValue.trim();
+      if (normalized) {
+        blockAcc[key] = normalized;
+      }
+      return blockAcc;
+    }, {});
+
+    return acc;
+  }, {});
+}
+
+function ensureTranslationLocaleShape(translations, fallbackFields = []) {
+  return SUPPORTED_LOCALES.reduce((acc, locale) => {
+    const block = translations?.[locale] || {};
+    acc[locale] = fallbackFields.reduce((blockAcc, field) => {
+      if (typeof block[field] === 'string') {
+        blockAcc[field] = block[field];
+      }
+      return blockAcc;
+    }, {});
+    return acc;
+  }, {});
+}
+
+function mergeTranslationPayload(existingTranslations, payloadTranslations) {
+  const normalizedExisting = normalizeCmsTranslations(existingTranslations);
+  const normalizedPayload = normalizeCmsTranslations(payloadTranslations);
+
+  return {
+    ...normalizedExisting,
+    ...Object.entries(normalizedPayload).reduce((acc, [locale, block]) => {
+      acc[locale] = {
+        ...(normalizedExisting[locale] || {}),
+        ...block,
+      };
+      return acc;
+    }, {}),
+  };
+}
+
+function applyTranslationsToLocalizedField(existingField, translations, fieldName) {
+  const merged = normalizeLocalizedField(existingField, { preserveEmpty: true });
+  Object.entries(translations || {}).forEach(([locale, block]) => {
+    if (typeof block?.[fieldName] === 'string' && block[fieldName].trim()) {
+      merged[locale] = block[fieldName].trim();
+    }
+  });
+  return merged;
+}
+
+function buildCmsTranslationsFromLegacy(source, fields) {
+  const result = normalizeCmsTranslations(source?.translations);
+  return ensureTranslationLocaleShape(
+    SUPPORTED_LOCALES.reduce((acc, locale) => {
+      acc[locale] = {
+        ...(result[locale] || {}),
+      };
+      fields.forEach((field) => {
+        const localized = resolveLocalizedFieldResult(source?.[field], locale).value;
+        if (localized) {
+          acc[locale][field] = localized;
+        }
+      });
+      return acc;
+    }, {}),
+    fields
+  );
 }
 
 function mergeLocalizedField(nextValue, currentValue) {
@@ -232,6 +317,7 @@ export function localizeCourseDocument(course, locale = DEFAULT_LOCALE) {
 
   return {
     ...plainCourse,
+    translations: buildCmsTranslationsFromLegacy(plainCourse, ['title', 'description']),
     titleTranslations: expandLocalizedField(plainCourse.title),
     descriptionTranslations: expandLocalizedField(plainCourse.description),
     title: titleResult.value,
@@ -271,27 +357,20 @@ export function localizeLessonDocument(lesson, locale = DEFAULT_LOCALE) {
       : { ...lesson };
   const safeLocale = getSafeLocale(locale);
   const titleResult = resolveLocalizedFieldResult(plainLesson.title, safeLocale);
-  const contentResult = resolveLocalizedFieldResult(plainLesson.content, safeLocale);
-  const subtitleResult = resolveLocalizedFieldResult(plainLesson.subtitles, safeLocale);
+  const descriptionResult = resolveLocalizedFieldResult(plainLesson.description, safeLocale);
 
-  if ((titleResult.usedEnglishFallback || contentResult.usedEnglishFallback || subtitleResult.usedEnglishFallback) && safeLocale !== DEFAULT_LOCALE) {
+  if ((titleResult.usedEnglishFallback || descriptionResult.usedEnglishFallback) && safeLocale !== DEFAULT_LOCALE) {
     console.warn('Missing translation for locale:', safeLocale);
   }
 
   return {
     ...plainLesson,
+    translations: buildCmsTranslationsFromLegacy(plainLesson, ['title', 'description']),
     titleTranslations: expandLocalizedField(plainLesson.title),
-    contentTranslations: expandLocalizedField(plainLesson.content),
-    subtitlesTranslations: expandLocalizedField(plainLesson.subtitles),
+    descriptionTranslations: expandLocalizedField(plainLesson.description),
     title: titleResult.value,
-    content: contentResult.value,
-    subtitles: normalizeLocalizedField(plainLesson.subtitles, { preserveEmpty: true }),
-    activeSubtitleUrl: subtitleResult.value || '',
-    activeSubtitleLocale: subtitleResult.value ? subtitleResult.localeUsed : null,
-    localeUsed:
-      titleResult.localeUsed === contentResult.localeUsed
-        ? titleResult.localeUsed
-        : contentResult.localeUsed,
+    description: descriptionResult.value,
+    localeUsed: titleResult.localeUsed,
   };
 }
 
@@ -325,6 +404,9 @@ export function localizeQuestionDocument(question, locale = DEFAULT_LOCALE) {
     questionText: textResult.value,
     explanation: explanationResult.value,
     options: localizedOptions,
+    answers: Array.isArray(plainQuestion.answers)
+      ? plainQuestion.answers.map((answer) => localizeAnswerDocument(answer, safeLocale))
+      : plainQuestion.answers,
     quizId: plainQuestion.quizId || plainQuestion.quiz,
     localeUsed: textResult.localeUsed,
   };
@@ -345,6 +427,7 @@ export function localizeQuizDocument(quiz, locale = DEFAULT_LOCALE) {
 
   return {
     ...plainQuiz,
+    translations: buildCmsTranslationsFromLegacy(plainQuiz, ['title', 'description']),
     titleTranslations: expandLocalizedField(plainQuiz.title),
     descriptionTranslations: expandLocalizedField(plainQuiz.description),
     title: titleResult.value,
@@ -363,12 +446,63 @@ export function localizeQuizDocument(quiz, locale = DEFAULT_LOCALE) {
   };
 }
 
+export function localizeAnswerDocument(answer, locale = DEFAULT_LOCALE) {
+  if (!answer || typeof answer !== 'object') {
+    return answer;
+  }
+
+  const plainAnswer =
+    typeof answer.toObject === 'function'
+      ? answer.toObject({ virtuals: true })
+      : { ...answer };
+  const safeLocale = getSafeLocale(locale);
+  const textResult = resolveLocalizedFieldResult(plainAnswer.text, safeLocale);
+
+  return {
+    ...plainAnswer,
+    translations: buildCmsTranslationsFromLegacy(plainAnswer, ['text']),
+    text: textResult.value,
+    localeUsed: textResult.localeUsed,
+  };
+}
+
+export function localizeCertificateDocument(certificate, locale = DEFAULT_LOCALE) {
+  if (!certificate || typeof certificate !== 'object') {
+    return certificate;
+  }
+
+  const plainCertificate =
+    typeof certificate.toObject === 'function'
+      ? certificate.toObject({ virtuals: true })
+      : { ...certificate };
+  const safeLocale = getSafeLocale(locale);
+  const nameResult = resolveLocalizedFieldResult(plainCertificate.name, safeLocale);
+  const descriptionResult = resolveLocalizedFieldResult(plainCertificate.description, safeLocale);
+
+  return {
+    ...plainCertificate,
+    translations: buildCmsTranslationsFromLegacy(plainCertificate, ['name', 'description']),
+    name: nameResult.value,
+    description: descriptionResult.value,
+    localeUsed:
+      nameResult.localeUsed === descriptionResult.localeUsed
+        ? nameResult.localeUsed
+        : nameResult.localeUsed || descriptionResult.localeUsed || DEFAULT_LOCALE,
+  };
+}
+
 export function prepareCourseWritePayload(payload = {}, existingCourse = null) {
-  const basePayload = {
+  const mergedTranslations = mergeTranslationPayload(existingCourse?.translations, payload.translations);
+  const basePayload = prepareSlugWritePayload({
     ...payload,
+    translations: mergedTranslations,
     title: mergeLocalizedField(payload.title, existingCourse?.title) ?? payload.title,
     description: mergeLocalizedField(payload.description, existingCourse?.description) ?? payload.description,
-  };
+  }, existingCourse, {
+    slugField: 'slug',
+    historyField: 'slugHistory',
+    titleField: 'title',
+  });
 
   if (payload.attributes && Array.isArray(payload.attributes)) {
     const formattedAttributes = [];
@@ -394,12 +528,17 @@ export function prepareCourseWritePayload(payload = {}, existingCourse = null) {
 }
 
 export function prepareLessonWritePayload(payload = {}, existingLesson = null) {
-  return {
+  const mergedTranslations = mergeTranslationPayload(existingLesson?.translations, payload.translations);
+  return prepareSlugWritePayload({
     ...payload,
+    translations: mergedTranslations,
     title: mergeLocalizedField(payload.title, existingLesson?.title) ?? payload.title,
-    content: mergeLocalizedField(payload.content, existingLesson?.content) ?? payload.content,
-    subtitles: mergeLocalizedField(payload.subtitles, existingLesson?.subtitles) ?? payload.subtitles,
-  };
+    description: mergeLocalizedField(payload.description, existingLesson?.description) ?? payload.description,
+  }, existingLesson, {
+    slugField: 'slug',
+    historyField: 'slugHistory',
+    titleField: 'title',
+  });
 }
 
 export function prepareModuleWritePayload(payload = {}, existingModule = null) {
@@ -411,9 +550,11 @@ export function prepareModuleWritePayload(payload = {}, existingModule = null) {
 
 export function prepareQuestionWritePayload(payload = {}, existingQuestion = null) {
   const nextText = payload.text ?? payload.questionText;
+  const mergedTranslations = mergeTranslationPayload(existingQuestion?.translations, payload.translations);
 
   return {
     ...payload,
+    translations: mergedTranslations,
     text: mergeLocalizedField(nextText, existingQuestion?.text) ?? nextText,
     explanation: mergeLocalizedField(payload.explanation, existingQuestion?.explanation) ?? payload.explanation,
     options: mergeLocalizedArray(payload.options, existingQuestion?.options),
@@ -421,9 +562,53 @@ export function prepareQuestionWritePayload(payload = {}, existingQuestion = nul
 }
 
 export function prepareQuizWritePayload(payload = {}, existingQuiz = null) {
-  return {
+  const mergedTranslations = mergeTranslationPayload(existingQuiz?.translations, payload.translations);
+  return prepareSlugWritePayload({
     ...payload,
+    translations: mergedTranslations,
     title: mergeLocalizedField(payload.title, existingQuiz?.title) ?? payload.title,
     description: mergeLocalizedField(payload.description, existingQuiz?.description) ?? payload.description,
+  }, existingQuiz, {
+    slugField: 'slug',
+    historyField: 'slugHistory',
+    titleField: 'title',
+  });
+}
+
+export function prepareTopicWritePayload(payload = {}, existingTopic = null) {
+  const mergedTranslations = mergeTranslationPayload(existingTopic?.translations, payload.translations);
+
+  return prepareSlugWritePayload({
+    ...payload,
+    translations: mergedTranslations,
+    title: mergeLocalizedField(payload.title, existingTopic?.title) ?? payload.title,
+    description: mergeLocalizedField(payload.description, existingTopic?.description) ?? payload.description,
+    summary: mergeLocalizedField(payload.summary, existingTopic?.summary) ?? payload.summary,
+  }, existingTopic, {
+    slugField: 'slug',
+    historyField: 'slugHistory',
+    titleField: 'title',
+  });
+}
+
+export function prepareCertificateWritePayload(payload = {}, existingCertificate = null) {
+  const mergedTranslations = mergeTranslationPayload(existingCertificate?.translations, payload.translations);
+
+  return {
+    ...payload,
+    translations: mergedTranslations,
+    name: mergeLocalizedField(payload.name, existingCertificate?.name) ?? payload.name,
+    description: mergeLocalizedField(payload.description, existingCertificate?.description) ?? payload.description,
   };
+}
+
+export function applyTranslationPatch(existing, translations, fieldMap = []) {
+  const mergedTranslations = mergeTranslationPayload(existing?.translations, translations);
+  const next = { ...existing, translations: mergedTranslations };
+
+  fieldMap.forEach((field) => {
+    next[field] = applyTranslationsToLocalizedField(existing?.[field], mergedTranslations, field);
+  });
+
+  return next;
 }

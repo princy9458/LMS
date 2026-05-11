@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -21,6 +21,13 @@ export default function AdminTopicsPage() {
   const [lessonFilter, setLessonFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [isDeleting, setIsDeleting] = useState(false);
+  const activeLocale = 'en';
+
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[activeLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -67,10 +74,13 @@ export default function AdminTopicsPage() {
     const lessonId = topic.lessonId || topic.lesson;
     const lesson = lessonMap[lessonId] || {};
     const courseId = topic.courseId || topic.course || lesson.courseId || lesson.course;
-    const courseTitle = courseMap[courseId]?.title || '';
+    const courseEntry = courseMap[courseId] || {};
+    const courseTitle = getDisplayTitle(courseEntry.title);
+    const topicTitle = getDisplayTitle(topic.title);
+    const lessonTitle = getDisplayTitle(lesson?.title);
 
-    const titleMatch = topic.title?.toLowerCase().includes(searchQuery.toLowerCase());
-    const lessonMatch = lesson?.title?.toLowerCase().includes(searchQuery.toLowerCase());
+    const titleMatch = topicTitle.toLowerCase().includes(searchQuery.toLowerCase());
+    const lessonMatch = lessonTitle.toLowerCase().includes(searchQuery.toLowerCase());
     const courseMatch = courseTitle.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesSearch = !searchQuery || titleMatch || lessonMatch || courseMatch;
@@ -137,7 +147,7 @@ export default function AdminTopicsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: `${topic.title} (Copy)`,
+          title: `${getDisplayTitle(topic.title)} (Copy)`,
           lessonId
         })
       });
@@ -242,7 +252,7 @@ export default function AdminTopicsPage() {
             <option value="all">All Courses</option>
             {courses.map((course) => (
               <option key={course._id} value={course._id}>
-                {course.title}
+                {getDisplayTitle(course.title)}
               </option>
             ))}
           </select>
@@ -255,7 +265,7 @@ export default function AdminTopicsPage() {
             <option value="all">All Lessons</option>
             {lessons.map((lesson) => (
               <option key={lesson._id} value={lesson._id}>
-                {lesson.title}
+                {getDisplayTitle(lesson.title)}
               </option>
             ))}
           </select>
@@ -325,7 +335,8 @@ export default function AdminTopicsPage() {
                   const lessonId = topic.lessonId || topic.lesson;
                   const lesson = lessonMap[lessonId] || {};
                   const courseId = topic.courseId || topic.course || lesson.courseId || lesson.course;
-                  const courseTitle = courseMap[courseId]?.title || '-';
+                  const courseEntry = courseMap[courseId] || {};
+                  const courseTitle = getDisplayTitle(courseEntry.title) || '-';
                   return (
                     <tr key={topic._id} className="group hover:bg-zinc-50">
                       <td className="px-4 py-3">
@@ -338,7 +349,7 @@ export default function AdminTopicsPage() {
                       <td className="px-4 py-3">
                         <div className="font-semibold text-blue-600">
                           <Link href={`/admin/topics/${topic._id}/edit`} className="hover:underline">
-                            {topic.title}
+                            {getDisplayTitle(topic.title)}
                           </Link>
                         </div>
                         <div className="text-xs text-zinc-500 mt-1 opacity-0 group-hover:opacity-100 transition">
@@ -359,7 +370,7 @@ export default function AdminTopicsPage() {
                           </button>
                           <span className="mx-1">|</span>
                           <Link
-                            href={courseId && lessonId ? `/courses/${courseId}/lessons/${lessonId}` : '#'}
+                            href={courseId && lessonId ? `/courses/${courseEntry.slug || courseId}/${lesson.slug || lessonId}` : '#'}
                             className="hover:underline"
                           >
                             View
@@ -377,7 +388,7 @@ export default function AdminTopicsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <Link href={`/admin/lessons/${lessonId}/edit`} className="text-blue-600 hover:underline">
-                          {lesson.title || '-'}
+                          {getDisplayTitle(lesson.title) || '-'}
                         </Link>
                       </td>
                       <td className="px-4 py-3">Admin</td>

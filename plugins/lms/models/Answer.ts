@@ -4,6 +4,7 @@ export interface IAnswer extends Document {
   tenant?: mongoose.Types.ObjectId;
   question: mongoose.Types.ObjectId;
   text: string;
+  translations?: Record<string, Record<string, string>>;
   isCorrect: boolean;
   order: number;
   createdAt: Date;
@@ -15,6 +16,7 @@ const AnswerSchema: Schema = new Schema({
   tenant: { type: Schema.Types.ObjectId, ref: 'Tenant' },
   question: { type: Schema.Types.ObjectId, ref: 'Question', required: true },
   text: { type: String, required: true },
+  translations: { type: Object, default: {} },
   isCorrect: { type: Boolean, default: false },
   order: { type: Number, default: 0 }
 }, { timestamps: true });

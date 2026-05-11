@@ -2,16 +2,26 @@
 
 import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter, useParams } from 'next/navigation';
-import { PlaySquare, AlertCircle, Save, Loader2, Video, Lock } from 'lucide-react';
+import { PlaySquare, AlertCircle, Save, Loader2, Lock } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { SUPPORTED_LANGUAGES } from '@/config/languages';
 import { CONTENT_LANGUAGES } from '@/config/contentLanguages';
-import { autofillHindiTranslation, translateToHindi } from '@/lib/hindiTranslation';
 import { getContentLocale, getLocaleFromPathname, getLocalePath } from '@/lib/i18n';
+import AdminLocaleSelector from '@/components/admin/AdminLocaleSelector';
+import { getLocaleCompletion } from '@/lib/adminLocale';
+import { useAdminLocale } from '@/components/admin/AdminLocaleProvider';
 
 const createLocalizedValues = (translations: Record<string, string> = {}) =>
   Object.fromEntries(CONTENT_LANGUAGES.map((language) => [language.code, translations[language.code] || '']));
+
+const toSlug = (value: string) =>
+  String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
 export default function AdminLessonEditPage() {
   const router = useRouter();
@@ -21,22 +31,24 @@ export default function AdminLessonEditPage() {
   const locale = getLocaleFromPathname(pathname);
   const contentLocale = getContentLocale(locale);
   const adminLessonsPath = getLocalePath(locale, '/admin/lessons');
+  const { locale: activeLocale, setLocale } = useAdminLocale();
 
   const [courses, setCourses] = useState<any[]>([]);
   
   const [formData, setFormData] = useState({
     courseId: '',
     title: createLocalizedValues(),
-    videoUrl: '',
+    description: createLocalizedValues(),
+    slug: '',
     order: 1,
     unlockType: 'completion',
     unlockDays: 0,
-    subtitles: Object.fromEntries(SUPPORTED_LANGUAGES.map((language) => [language.code, ''])),
   });
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [slugEdited, setSlugEdited] = useState(false);
   const [showCourseModal, setShowCourseModal] = useState(false);
   const [courseSubmitting, setCourseSubmitting] = useState(false);
   const [courseForm, setCourseForm] = useState({
@@ -47,6 +59,13 @@ export default function AdminLessonEditPage() {
     difficultyLevel: 'Beginner',
     thumbnail: ''
   });
+
+
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[contentLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -69,16 +88,23 @@ export default function AdminLessonEditPage() {
 
         const lesson = lessonData.data ?? lessonData;
         if (lesson && lesson._id) {
+          const lessonTranslations = lesson.translations || {};
+          const titleTranslations = CONTENT_LANGUAGES.reduce<Record<string, string>>((acc, language) => {
+            acc[language.code] = lessonTranslations?.[language.code]?.title || lesson.titleTranslations?.[language.code] || lesson.title || '';
+            return acc;
+          }, {});
+          const descriptionTranslations = CONTENT_LANGUAGES.reduce<Record<string, string>>((acc, language) => {
+            acc[language.code] = lessonTranslations?.[language.code]?.description || lesson.descriptionTranslations?.[language.code] || lesson.description || '';
+            return acc;
+          }, {});
           setFormData({
             courseId: lesson.courseId || '',
-            title: createLocalizedValues(lesson.titleTranslations || { en: lesson.title || '' }),
-            videoUrl: lesson.videoUrl || '',
+            title: createLocalizedValues(titleTranslations),
+            description: createLocalizedValues(descriptionTranslations),
+            slug: lesson.slug || '',
             order: lesson.order || 1,
             unlockType: lesson.unlockLogic?.type || 'completion',
             unlockDays: lesson.unlockLogic?.daysFromEnrollment || 0,
-            subtitles: Object.fromEntries(
-              SUPPORTED_LANGUAGES.map((language) => [language.code, lesson.subtitles?.[language.code] || ''])
-            ),
           });
         } else {
           throw new Error('Lesson not found');
@@ -107,8 +133,8 @@ export default function AdminLessonEditPage() {
       const payload = {
         courseId: formData.courseId,
         title: formData.title,
-        videoUrl: formData.videoUrl,
-        subtitles: formData.subtitles,
+        description: formData.description,
+        slug: formData.slug || toSlug(formData.title.en || ''),
         order: parseInt(formData.order.toString()) || 1,
         unlockLogic: {
           type: formData.unlockType,
@@ -136,7 +162,7 @@ export default function AdminLessonEditPage() {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
@@ -146,26 +172,30 @@ export default function AdminLessonEditPage() {
     value: string
   ) => {
     setFormData((prev) => {
-      const nextTitle = {
-        ...prev.title,
-        [locale]: value,
-      };
-
       return {
         ...prev,
-        title: locale === 'en' ? autofillHindiTranslation(nextTitle) : nextTitle,
+        slug: locale === 'en' && !slugEdited ? toSlug(value) : prev.slug,
+        title: {
+          ...prev.title,
+          [locale]: value,
+        },
       };
     });
   };
 
-  const handleSubtitleChange = (locale: string, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      subtitles: {
-        ...prev.subtitles,
-        [locale]: value,
-      },
-    }));
+  const handleLocalizedDescriptionChange = (
+    locale: (typeof CONTENT_LANGUAGES)[number]['code'],
+    value: string
+  ) => {
+    setFormData((prev) => {
+      return {
+        ...prev,
+        description: {
+          ...prev.description,
+          [locale]: value,
+        },
+      };
+    });
   };
 
   const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -191,13 +221,11 @@ export default function AdminLessonEditPage() {
           ...courseForm,
           title: {
             en: courseForm.title,
-            hi: translateToHindi(courseForm.title),
             fr: '',
             es: '',
           },
           description: {
             en: courseForm.description,
-            hi: translateToHindi(courseForm.description),
             fr: '',
             es: '',
           },
@@ -234,6 +262,8 @@ export default function AdminLessonEditPage() {
     );
   }
 
+  const activeLanguage = CONTENT_LANGUAGES.find((lang) => lang.code === activeLocale) || CONTENT_LANGUAGES[0];
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
@@ -246,7 +276,7 @@ export default function AdminLessonEditPage() {
         <h1 className="text-2xl font-bold text-zinc-900 tracking-tight flex items-center gap-2">
           <PlaySquare className="w-6 h-6 text-indigo-500" /> Edit Lesson
         </h1>
-        <p className="text-zinc-500 text-sm mt-1">Update {formData.title.en || 'this lesson'} and adjust its unlock criteria.</p>
+        <p className="text-zinc-500 text-sm mt-1">Update {getDisplayTitle(formData.title) || 'this lesson'} and adjust its unlock criteria.</p>
       </div>
 
       <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-6 md:p-8">
@@ -270,63 +300,68 @@ export default function AdminLessonEditPage() {
               >
                 {courses.length === 0 && <option value="">No courses available.</option>}
                 {courses.map(course => (
-                  <option key={course._id} value={course._id}>{course.title}</option>
+                  <option key={course._id} value={course._id}>{getDisplayTitle(course.title)}</option>
                 ))}
                 <option value="__add__">➕ Add New Course</option>
               </select>
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-semibold text-zinc-900">Multilingual Lesson Title</label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {CONTENT_LANGUAGES.map((language) => (
-                  <div key={language.code} className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                      {language.label}
-                    </label>
-                    <input
-                      required={language.code === 'en'}
-                      value={formData.title[language.code] || ''}
-                      onChange={(e) => handleLocalizedTitleChange(language.code, e.target.value)}
-                      className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                    />
+              <AdminLocaleSelector
+                value={activeLocale}
+                onChange={setLocale}
+                completion={CONTENT_LANGUAGES.reduce<Record<string, 'complete' | 'partial' | 'missing'>>((acc, language) => {
+                  const title = formData.title[language.code]?.trim();
+                  acc[language.code] = title ? 'complete' : language.code !== 'en' && formData.title.en?.trim() ? 'partial' : 'missing';
+                  return acc;
+                }, {})}
+              />
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-zinc-900">Lesson Title ({activeLanguage.label})</label>
+                  <input
+                    required={activeLocale === 'en'}
+                    value={formData.title[activeLocale] || ''}
+                    onChange={(e) => handleLocalizedTitleChange(activeLocale, e.target.value)}
+                    placeholder="Lesson title"
+                    className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-zinc-900">Lesson Description ({activeLanguage.label})</label>
+                  <textarea
+                    required={activeLocale === 'en'}
+                    value={formData.description[activeLocale] || ''}
+                    onChange={(e) => handleLocalizedDescriptionChange(activeLocale, e.target.value)}
+                    placeholder="Write a short summary about this lesson..."
+                    rows={4}
+                    maxLength={500}
+                    className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all resize-none"
+                  />
+                  <div className="flex justify-end">
+                    <span className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider">
+                      {(formData.description[activeLocale] || '').length}/500 characters
+                    </span>
                   </div>
-                ))}
+                </div>
+                
+                <p className="text-xs text-zinc-500">Missing locales will fall back to English on the frontend.</p>
               </div>
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-semibold text-zinc-900">Video URL</label>
-              <div className="flex relative">
-                <Video className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 w-5 h-5" />
-                <input
-                  name="videoUrl"
-                  type="url"
-                  value={formData.videoUrl}
-                  onChange={handleChange}
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-11 pr-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4 md:col-span-2">
-              <label className="text-sm font-semibold text-zinc-900">Subtitle Files</label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {SUPPORTED_LANGUAGES.map((language) => (
-                  <div key={language.code} className="space-y-2">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                      {language.label}
-                    </label>
-                    <input
-                      type="url"
-                      value={formData.subtitles[language.code] || ''}
-                      onChange={(e) => handleSubtitleChange(language.code, e.target.value)}
-                      placeholder={`https://example.com/subtitles-${language.code}.vtt`}
-                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                    />
-                  </div>
-                ))}
-              </div>
+              <label className="text-sm font-semibold text-zinc-900">Slug</label>
+              <input
+                name="slug"
+                value={formData.slug}
+                onChange={(e) => {
+                  setSlugEdited(true);
+                  setFormData((prev) => ({ ...prev, slug: toSlug(e.target.value) }));
+                }}
+                placeholder="introduction-to-ai"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-mono"
+              />
             </div>
 
             <div className="space-y-2">
@@ -440,7 +475,7 @@ export default function AdminLessonEditPage() {
               <input
                 value={courseForm.thumbnail}
                 onChange={(e) => setCourseForm((prev) => ({ ...prev, thumbnail: e.target.value }))}
-                placeholder="Thumbnail URL (optional)"
+                placeholder="Paste a course thumbnail image URL"
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm"
               />
             </div>

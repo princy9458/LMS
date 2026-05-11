@@ -20,6 +20,13 @@ export default function EditCertificatePage() {
     courseId: ''
   });
 
+  const activeLocale = 'en';
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[activeLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       console.log('Resolving certificate data for ID:', certificateId);
@@ -128,7 +135,7 @@ export default function EditCertificatePage() {
               <option value="">Select a course</option>
               {courses.map((course) => (
                 <option key={course._id} value={course._id}>
-                  {course.title}
+                  {getDisplayTitle(course.title)}
                 </option>
               ))}
               {courses.length === 0 && !loading && <option value="" disabled>No courses found. Please create a course first.</option>}

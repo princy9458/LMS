@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { readJsonResponse, unwrapApiData } from '@/lib/api';
 
 export default function CourseResumePage({ params }: { params: { id: string } }) {
     const router = useRouter();
@@ -11,14 +12,14 @@ export default function CourseResumePage({ params }: { params: { id: string } })
         const resume = async () => {
             try {
                 const res = await fetch(`/api/lms/enrollment/${courseId}`);
-                const enrollment = await res.json();
+                const enrollment = unwrapApiData(await readJsonResponse(res));
                 
-                if (enrollment.currentLesson) {
+                if (enrollment?.currentLesson) {
                     router.replace(`/lms/learn/${courseId}/lesson/${enrollment.currentLesson._id || enrollment.currentLesson}`);
                 } else {
                     const syllabusRes = await fetch(`/api/lms/courses/${courseId}/syllabus`);
-                    const syllabus = await syllabusRes.json();
-                    const firstLesson = syllabus[0]?.lessons[0];
+                    const syllabus = unwrapApiData(await readJsonResponse(syllabusRes));
+                    const firstLesson = Array.isArray(syllabus) ? syllabus[0]?.lessons?.[0] : syllabus?.lessons?.[0];
                     if (firstLesson) {
                         router.replace(`/lms/learn/${courseId}/lesson/${firstLesson._id}`);
                     }

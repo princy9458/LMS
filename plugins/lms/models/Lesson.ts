@@ -1,25 +1,19 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { hasEnglishTranslation, localizedTextField } from '@/plugins/lms/models/localizedField';
 import type { LocalizedText } from '@/plugins/lms/models/localizedField';
+import { hasEnglishTranslation, localizedTextField } from '@/plugins/lms/models/localizedField';
+import { makeUniqueSlug, slugifyText } from '@/modules/lms/utils/slug';
 
 export interface ILesson extends Document {
   tenant?: mongoose.Types.ObjectId;
   title: LocalizedText;
   course: mongoose.Types.ObjectId;
-  module?: mongoose.Types.ObjectId;
-  content: LocalizedText;
-  subtitles?: LocalizedText;
-  type: 'video' | 'text' | 'pdf';
-  videoUrl?: string;
-  videoProvider?: 's3' | 'cloudflare' | 'mux' | 'local';
-  videoExternalId?: string;
-  duration?: number;
-  isPreview: boolean;
-  quizzes: mongoose.Types.ObjectId[];
-  topics: mongoose.Types.ObjectId[];
+  translations?: Record<string, Record<string, string>>;
+  slug: string;
+  slugHistory?: string[];
   order: number;
   unlockType?: 'completion' | 'time' | 'none';
   unlockAfterDays?: number;
+  description?: LocalizedText;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,24 +28,33 @@ const LessonSchema: Schema = new Schema({
       message: 'Lesson title must include an English translation.',
     },
   }),
+  slug: { type: String, required: true, trim: true },
+  slugHistory: { type: [String], default: [] },
+  translations: { type: Object, default: {} },
   course: { type: Schema.Types.ObjectId, ref: 'Course', required: true },
-  module: { type: Schema.Types.ObjectId, ref: 'Module' },
-  content: localizedTextField(),
-  subtitles: localizedTextField(),
-  type: { type: String, enum: ['video', 'text', 'pdf'], default: 'text' },
-  videoUrl: { type: String },
-  videoProvider: { type: String, enum: ['s3', 'cloudflare', 'mux', 'local'], default: 'local' },
-  videoExternalId: { type: String },
-  duration: { type: Number },
-  isPreview: { type: Boolean, default: false },
-  quizzes: [{ type: Schema.Types.ObjectId, ref: 'Quiz' }],
-  topics: [{ type: Schema.Types.ObjectId, ref: 'Topic' }],
   order: { type: Number, default: 0 },
   unlockType: { type: String, enum: ['completion', 'time', 'none'], default: 'none' },
-  unlockAfterDays: { type: Number, default: 0 }
+  unlockAfterDays: { type: Number, default: 0 },
+  description: localizedTextField()
 }, { timestamps: true });
 
 LessonSchema.index({ tenant: 1, course: 1, order: 1 });
 LessonSchema.index({ tenant: 1, module: 1, order: 1 });
+LessonSchema.index({ tenant: 1, slug: 1 }, { unique: true });
+LessonSchema.index({ tenant: 1, slugHistory: 1 });
+
+LessonSchema.pre('validate', async function(this: ILesson, next) {
+  const source = hasEnglishTranslation(this.title) ? String((this.title as any)?.en || '') : '';
+  if (!this.slug && source) {
+    this.slug = slugifyText(source);
+  }
+  if (this.slug) {
+    this.slug = await makeUniqueSlug(this.constructor as any, this.slug, {
+      tenant: this.tenant,
+      excludeId: this._id,
+    });
+  }
+  next();
+});
 
 export default mongoose.models.Lesson || mongoose.model<ILesson>('Lesson', LessonSchema);

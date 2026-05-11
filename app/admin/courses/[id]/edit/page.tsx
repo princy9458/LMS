@@ -6,13 +6,24 @@ import { BookOpen, AlertCircle, Save, Loader2, Image as ImageIcon, Trash2, Zap, 
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { CONTENT_LANGUAGES } from '@/config/contentLanguages';
-import { autofillHindiTranslation } from '@/lib/hindiTranslation';
 import { getContentLocale, getLocaleFromPathname, getLocalePath } from '@/lib/i18n';
+import AdminLocaleSelector from '@/components/admin/AdminLocaleSelector';
+import { getLocaleCompletion } from '@/lib/adminLocale';
+import { useAdminLocale } from '@/components/admin/AdminLocaleProvider';
 
 const createLocalizedValues = (translations: Record<string, string> = {}) =>
   Object.fromEntries(
     CONTENT_LANGUAGES.map((language) => [language.code, translations[language.code] || ''])
   );
+
+const toSlug = (value: string) =>
+  String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
 type Attribute = { key: string; value: Record<string, string> };
 
@@ -24,9 +35,11 @@ export default function AdminCourseEditPage() {
   const locale = getLocaleFromPathname(pathname);
   const contentLocale = getContentLocale(locale);
   const adminCoursesPath = getLocalePath(locale, '/admin/courses');
+  const { locale: activeLocale, setLocale } = useAdminLocale();
 
   const [formData, setFormData] = useState({
     title: createLocalizedValues(),
+    slug: '',
     description: createLocalizedValues(),
     instructorName: '',
     thumbnail: '',
@@ -40,6 +53,7 @@ export default function AdminCourseEditPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [slugEdited, setSlugEdited] = useState(false);
 
   useEffect(() => {
     const fetchCourse = async () => {
@@ -53,10 +67,18 @@ export default function AdminCourseEditPage() {
 
         const course = data?.data ?? data;
         if (res.ok && course?._id) {
-          const titleTranslations = course.titleTranslations || { en: course.title || '' };
-          const descriptionTranslations = course.descriptionTranslations || { en: course.description || '' };
+          const courseTranslations = course.translations || {};
+          const titleTranslations = CONTENT_LANGUAGES.reduce<Record<string, string>>((acc, language) => {
+            acc[language.code] = courseTranslations?.[language.code]?.title || course.titleTranslations?.[language.code] || course.title || '';
+            return acc;
+          }, {});
+          const descriptionTranslations = CONTENT_LANGUAGES.reduce<Record<string, string>>((acc, language) => {
+            acc[language.code] = courseTranslations?.[language.code]?.description || course.descriptionTranslations?.[language.code] || course.description || '';
+            return acc;
+          }, {});
           setFormData({
             title: createLocalizedValues(titleTranslations),
+            slug: course.slug || '',
             description: createLocalizedValues(descriptionTranslations),
             instructorName: course.instructorName || '',
             thumbnail: course.thumbnail || '',
@@ -95,9 +117,16 @@ export default function AdminCourseEditPage() {
 
       const payload = {
         ...formData,
+        slug: formData.slug || toSlug(formData.title.en || ''),
         skillsEarned: skillsArray,
         totalLessons: parseInt(formData.totalLessons.toString()) || 0,
-        attributes: formData.attributes
+        attributes: formData.attributes,
+        translations: {
+          [activeLocale]: {
+            title: formData.title[activeLocale],
+            description: formData.description[activeLocale],
+          }
+        }
       };
 
       const response = await fetch(`/api/courses/${id}`, {
@@ -131,14 +160,13 @@ export default function AdminCourseEditPage() {
     value: string
   ) => {
     setFormData((prev) => {
-      const nextFieldValue = {
-        ...prev[field],
-        [locale]: value,
-      };
-
       return {
         ...prev,
-        [field]: locale === 'en' ? autofillHindiTranslation(nextFieldValue) : nextFieldValue,
+        slug: field === 'title' && locale === 'en' && !slugEdited ? toSlug(value) : prev.slug,
+        [field]: {
+          ...prev[field],
+          [locale]: value,
+        },
       };
     });
   };
@@ -171,6 +199,18 @@ export default function AdminCourseEditPage() {
       newAttributes[index].value[locale] = value;
       return { ...prev, attributes: newAttributes };
     });
+  };
+
+  const handleThumbnailFile = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormData((prev) => ({
+        ...prev,
+        thumbnail: typeof reader.result === 'string' ? reader.result : prev.thumbnail,
+      }));
+    };
+    reader.readAsDataURL(file);
   };
 
   if (loading) {
@@ -207,26 +247,38 @@ export default function AdminCourseEditPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4 md:col-span-2">
-              <label className="text-sm font-semibold text-zinc-900">Multilingual Course Metadata</label>
-              <div className="grid grid-cols-1 gap-4">
-                {CONTENT_LANGUAGES.map((language) => (
-                  <div key={language.code} className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 space-y-3">
-                    <p className="text-sm font-semibold text-zinc-900">{language.label}</p>
-                    <input
-                      required={language.code === 'en'}
-                      value={formData.title[language.code]}
-                      onChange={(e) => handleLocalizedChange('title', language.code, e.target.value)}
-                      className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-medium"
-                    />
-                    <textarea
-                      required={language.code === 'en'}
-                      rows={3}
-                      value={formData.description[language.code]}
-                      onChange={(e) => handleLocalizedChange('description', language.code, e.target.value)}
-                      className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                    />
-                  </div>
-                ))}
+              <AdminLocaleSelector
+                value={activeLocale}
+                onChange={setLocale}
+                completion={CONTENT_LANGUAGES.reduce<Record<string, 'complete' | 'partial' | 'missing'>>((acc, language) => {
+                  const title = formData.title[language.code]?.trim();
+                  const description = formData.description[language.code]?.trim();
+                  acc[language.code] = title && description
+                    ? 'complete'
+                    : title || description || (language.code !== 'en' && formData.title.en?.trim())
+                      ? 'partial'
+                      : 'missing';
+                  return acc;
+                }, {})}
+              />
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 space-y-3">
+                <p className="text-sm font-semibold text-zinc-900">{CONTENT_LANGUAGES.find((language) => language.code === activeLocale)?.label || 'Locale'}</p>
+                <input
+                  required={activeLocale === 'en'}
+                  value={formData.title[activeLocale] || ''}
+                  onChange={(e) => handleLocalizedChange('title', activeLocale, e.target.value)}
+                  placeholder="Course title"
+                  className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-medium"
+                />
+                <textarea
+                  required={activeLocale === 'en'}
+                  rows={4}
+                  value={formData.description[activeLocale] || ''}
+                  onChange={(e) => handleLocalizedChange('description', activeLocale, e.target.value)}
+                  placeholder="Course description"
+                  className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                />
+                <p className="text-xs text-zinc-500">Missing locales will fall back to English on the frontend.</p>
               </div>
             </div>
 
@@ -238,6 +290,21 @@ export default function AdminCourseEditPage() {
                 onChange={handleChange}
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
               />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm font-semibold text-zinc-900">Slug</label>
+              <input
+                name="slug"
+                value={formData.slug}
+                onChange={(e) => {
+                  setSlugEdited(true);
+                  setFormData((prev) => ({ ...prev, slug: toSlug(e.target.value) }));
+                }}
+                placeholder="ai-machine-learning"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-mono"
+              />
+              <p className="text-xs text-zinc-500">If you change the title, the slug auto-updates until you edit it manually.</p>
             </div>
 
             <div className="space-y-2">
@@ -281,17 +348,44 @@ export default function AdminCourseEditPage() {
               />
             </div>
 
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-semibold text-zinc-900">Thumbnail URL</label>
-              <div className="flex relative">
-                <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 w-5 h-5" />
-                <input
-                  name="thumbnail"
-                  type="url"
-                  value={formData.thumbnail}
-                  onChange={handleChange}
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-11 pr-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                />
+            <div className="space-y-3 md:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-sm font-semibold text-zinc-900">Course Thumbnail</label>
+                <span className="text-xs text-zinc-500">Image only, used for preview cards.</span>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+                <div className="space-y-3">
+                  <div className="flex relative">
+                    <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 w-5 h-5" />
+                    <input
+                      name="thumbnail"
+                      type="url"
+                      value={formData.thumbnail}
+                      onChange={handleChange}
+                      placeholder="Paste an image URL"
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-11 pr-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                    />
+                  </div>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition">
+                    <Plus className="w-4 h-4" />
+                    Upload image
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleThumbnailFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                </div>
+                <div className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 min-h-[140px]">
+                  {formData.thumbnail ? (
+                    <img src={formData.thumbnail} alt="Course thumbnail preview" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full min-h-[140px] items-center justify-center px-4 text-center text-sm text-zinc-500">
+                      Thumbnail preview will appear here
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -342,20 +436,16 @@ export default function AdminCourseEditPage() {
                         </button>
                       </div>
                       
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {CONTENT_LANGUAGES.map((language) => (
-                          <div key={language.code} className="space-y-1.5">
-                            <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 flex items-center gap-1">
-                              {language.label}
-                            </label>
-                            <input
-                              value={attr.value[language.code]}
-                              onChange={(e) => handleAttributeValueChange(index, language.code, e.target.value)}
-                              placeholder={`Value in ${language.label}`}
-                              className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
-                            />
-                          </div>
-                        ))}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 flex items-center gap-1">
+                          {CONTENT_LANGUAGES.find((language) => language.code === activeLocale)?.label || 'Locale'}
+                        </label>
+                        <input
+                          value={attr.value[activeLocale] || ''}
+                          onChange={(e) => handleAttributeValueChange(index, activeLocale, e.target.value)}
+                          placeholder={`Value in ${CONTENT_LANGUAGES.find((language) => language.code === activeLocale)?.label || 'selected locale'}`}
+                          className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                        />
                       </div>
                     </div>
                   ))}

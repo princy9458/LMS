@@ -6,6 +6,7 @@ export interface IQuestion extends Document {
   tenant?: mongoose.Types.ObjectId;
   quiz?: mongoose.Types.ObjectId; // Optional for question bank usage
   text: LocalizedText;
+  translations?: Record<string, Record<string, string>>;
   type: 'single' | 'multiple' | 'boolean' | 'short';
   points: number;
   options?: LocalizedText[];
@@ -27,6 +28,7 @@ const QuestionSchema: Schema = new Schema({
       message: 'Question text must include an English translation.',
     },
   }),
+  translations: { type: Object, default: {} },
   type: { 
     type: String, 
     enum: ['single', 'multiple', 'boolean', 'short'], 

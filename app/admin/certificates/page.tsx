@@ -42,11 +42,18 @@ export default function CertificatesPage() {
     courseName: '',
     date: ''
   });
+  const activeLocale = 'en';
+
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[activeLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
 
   const courseMap = useMemo(() => {
     const map: Record<string, string> = {};
     courses.forEach((course) => {
-      map[course._id] = course.title;
+      map[course._id] = getDisplayTitle(course.title);
     });
     return map;
   }, [courses]);

@@ -2,6 +2,11 @@ import { dbConnect } from '@/lib/dbConnect';
 import mongoose from 'mongoose';
 import { certificateService } from '@/modules/lms/services/certificateService';
 import { badRequest, json } from '@/modules/lms/utils/api';
+import {
+  getRequestedLocale,
+  localizeCertificateDocument,
+  prepareCertificateWritePayload,
+} from '@/modules/lms/utils/courseLocalization';
 
 export async function listCertificates() {
   await dbConnect();
@@ -20,11 +25,14 @@ export async function createCertificate(request) {
   const payload = {
     name: body.name,
     description: body.description,
+    translations: body.translations,
     templateUrl: body.templateUrl,
     courseId: body.courseId
   };
 
-  const certificate = await certificateService.createCertificate(payload);
+  const certificate = await certificateService.createCertificate(
+    prepareCertificateWritePayload(payload)
+  );
   return json({ success: true, data: certificate }, 201);
 }
 
@@ -44,7 +52,8 @@ export async function getCertificate(request, { params }) {
     return json({ success: false, error: 'Certificate not found' }, 404);
   }
 
-  return json({ success: true, data: certificate });
+  const locale = getRequestedLocale(request);
+  return json({ success: true, data: localizeCertificateDocument(certificate, locale) });
 }
 
 export async function updateCertificate(request, { params }) {
@@ -60,19 +69,22 @@ export async function updateCertificate(request, { params }) {
 
   const body = await request.json();
 
-  const payload = {
+  const existing = await certificateService.getCertificateById(id);
+  const payload = prepareCertificateWritePayload({
     name: body.name,
     description: body.description,
+    translations: body.translations,
     templateUrl: body.templateUrl,
     courseId: body.courseId
-  };
+  }, existing);
 
   const updated = await certificateService.updateCertificate(id, payload);
   if (!updated) {
     return json({ success: false, error: 'Certificate not found' }, 404);
   }
 
-  return json({ success: true, data: updated });
+  const locale = getRequestedLocale(request);
+  return json({ success: true, data: localizeCertificateDocument(updated, locale) });
 }
 
 export async function deleteCertificate(request, { params }) {

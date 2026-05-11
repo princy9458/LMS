@@ -1,38 +1,29 @@
-import Lesson from '@/modules/lms/models/Lesson';
 import Topic from '@/modules/lms/models/Topic';
+import { TOPIC_RELATIONS_POPULATE, getTopicTreeById, getTopicTreeByLesson } from '@/modules/lms/utils/learningTree';
 
 export const topicService = {
   async createTopic(data) {
-    const topic = await Topic.create(data);
-
-    if (topic.lesson) {
-      await Lesson.findByIdAndUpdate(
-        topic.lesson,
-        { $addToSet: { topics: topic._id } },
-        { new: true }
-      );
-    }
-
-    return topic;
+    return Topic.create(data);
   },
 
   async listTopicsByLesson(lessonId) {
-    return Topic.find({ lesson: lessonId }).sort({ order: 1 });
+    return getTopicTreeByLesson(lessonId);
   },
 
   async listTopics() {
-    return Topic.find({}).sort({ createdAt: -1 });
+    return Topic.find({}).sort({ createdAt: -1 }).populate(TOPIC_RELATIONS_POPULATE);
   },
 
   async getTopicById(id) {
-    return Topic.findById(id);
+    return getTopicTreeById(id);
   },
 
   async updateTopic(id, payload) {
-    return Topic.findByIdAndUpdate(id, payload, {
-      new: true,
-      runValidators: true
-    });
+    const topic = await Topic.findById(id);
+    if (!topic) return null;
+    topic.set(payload);
+    await topic.save();
+    return topic;
   },
 
   async deleteTopic(id) {

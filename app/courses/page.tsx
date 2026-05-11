@@ -7,6 +7,7 @@ import { RootState, AppDispatch } from '@/modules/lms/store/store';
 import { setCoursesData, setCoursesLoading, setCoursesError } from '@/modules/lms/store/slices/coursesSlice';
 import { CourseCard } from '@/modules/lms/components/courses/CourseCard';
 import { getContentLocale, getLocaleFromPathname, getLocalePath, translateCommon } from '@/lib/i18n';
+import { readJsonResponse, unwrapApiData } from '@/lib/api';
 
 export default function CoursesPage() {
   const dispatch = useDispatch<AppDispatch>();
@@ -26,9 +27,10 @@ export default function CoursesPage() {
           console.error('Failed to fetch courses:', response.status, errorText);
           throw new Error(`Failed to fetch courses (${response.status})`);
         }
-        const result = await response.json();
+        const result = await readJsonResponse(response);
         // API returns { success: true, count: n, data: [...] }
-        dispatch(setCoursesData(result.data || []));
+        const courses = unwrapApiData(result);
+        dispatch(setCoursesData(Array.isArray(courses) ? courses : []));
       } catch (err: any) {
         console.error('Error fetching courses:', err);
         dispatch(setCoursesError(err.message || 'Something went wrong'));
@@ -85,7 +87,7 @@ export default function CoursesPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {items.map((course) => (
-              <CourseCard key={course._id} {...course} href={getLocalePath(locale, `/courses/${course._id}`)} />
+              <CourseCard key={course._id} {...course} href={getLocalePath(locale, `/courses/${course.slug || course._id}`)} />
             ))}
           </div>
         )}

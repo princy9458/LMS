@@ -34,7 +34,11 @@ export async function POST(request) {
     });
 
     const passingMarks = quiz.passingMarks ?? quiz.passingScore ?? 0;
-    const passed = score >= passingMarks;
+    const requiredScore =
+      passingMarks > (quiz.questions || []).length
+        ? Math.ceil(((quiz.questions || []).length * passingMarks) / 100)
+        : passingMarks;
+    const passed = score >= requiredScore;
 
     const attempt = await QuizAttempt.create({
       userId,
@@ -51,6 +55,7 @@ export async function POST(request) {
         score,
         total: (quiz.questions || []).length,
         passed,
+        requiredScore,
         attemptId: attempt._id
       }
     });

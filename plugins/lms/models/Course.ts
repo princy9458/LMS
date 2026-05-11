@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { getTranslatedField, hasEnglishTranslation, localizedTextField } from '@/plugins/lms/models/localizedField';
 import type { LocalizedText } from '@/plugins/lms/models/localizedField';
+import { makeUniqueSlug, slugifyText } from '@/modules/lms/utils/slug';
 
 export interface ICourseAttribute {
   key: string;
@@ -13,6 +14,8 @@ export interface ICourse extends Document {
   title: LocalizedText;
   slug: string;
   description: LocalizedText;
+  translations?: Record<string, Record<string, string>>;
+  slugHistory?: string[];
   price: number;
   currency: string;
   isPaid: boolean;
@@ -44,6 +47,7 @@ const CourseSchema: Schema = new Schema({
     },
   }),
   slug: { type: String, required: true },
+  slugHistory: { type: [String], default: [] },
   description: localizedTextField({
     required: true,
     validate: {
@@ -51,6 +55,7 @@ const CourseSchema: Schema = new Schema({
       message: 'Course description must include an English translation.',
     },
   }),
+  translations: { type: Object, default: {} },
   price: { type: Number, default: 0 },
   currency: { type: String, default: 'USD' },
   isPaid: { type: Boolean, default: false },
@@ -75,18 +80,21 @@ const CourseSchema: Schema = new Schema({
 
 // Combined index: Tenant isolation + slug
 CourseSchema.index({ tenant: 1, slug: 1 }, { unique: true });
+CourseSchema.index({ tenant: 1, slugHistory: 1 });
 CourseSchema.index({ '$**': 'text' });
 
-CourseSchema.pre('validate', function(this: ICourse, next) {
+CourseSchema.pre('validate', async function(this: ICourse, next) {
   const slugSourceTitle = getTranslatedField(this.title, 'en');
 
-  // Auto-generate slug if missing
   if (!this.slug && slugSourceTitle) {
-    this.slug = slugSourceTitle
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '');
+    this.slug = slugifyText(slugSourceTitle);
+  }
+
+  if (this.slug) {
+    this.slug = await makeUniqueSlug(this.constructor as any, this.slug, {
+      tenant: this.tenant,
+      excludeId: this._id,
+    });
   }
 
   // Keep difficultyLevel and level in sync
@@ -97,6 +105,13 @@ CourseSchema.pre('validate', function(this: ICourse, next) {
     this.difficultyLevel = this.level;
   }
 
+  next();
+});
+
+CourseSchema.pre('save', function(this: ICourse, next) {
+  if (this.lessons) {
+    this.totalLessons = this.lessons.length;
+  }
   next();
 });
 

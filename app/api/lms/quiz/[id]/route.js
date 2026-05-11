@@ -8,14 +8,16 @@ import {
   localizeQuizDocument,
   prepareQuizWritePayload,
 } from '@/modules/lms/utils/courseLocalization';
+import { resolveDocumentBySlugOrId } from '@/modules/lms/utils/slug';
 
 export async function GET(request, { params }) {
   try {
     await dbConnect();
     const { id } = await params;
     const locale = getRequestedLocale(request);
-    const quiz = await Quiz.findById(id)
-      .populate({ path: 'questions', populate: { path: 'answers' } });
+    const quiz = await resolveDocumentBySlugOrId(Quiz, id, {
+      populate: { path: 'questions', populate: { path: 'answers' } },
+    });
     
     if (!quiz) {
       return NextResponse.json({ success: false, error: 'Quiz not found' }, { status: 404 });
@@ -64,14 +66,12 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ success: false, error: 'English title is required' }, { status: 400 });
     }
 
-    const quiz = await Quiz.findByIdAndUpdate(id, payload, {
-      new: true,
-      runValidators: true,
-    });
-    
+    const quiz = await Quiz.findById(id);
     if (!quiz) {
       return NextResponse.json({ success: false, error: 'Quiz not found' }, { status: 404 });
     }
+    quiz.set(payload);
+    await quiz.save();
 
     return NextResponse.json({ success: true, data: localizeQuizDocument(quiz, getRequestedLocale(request)) });
   } catch (error) {

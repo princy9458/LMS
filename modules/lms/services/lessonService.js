@@ -1,5 +1,6 @@
 import Course from '@/modules/lms/models/Course';
 import Lesson from '@/modules/lms/models/Lesson';
+import { getLessonTreeByCourse, getLessonTreeById } from '@/modules/lms/utils/learningTree';
 
 export const lessonService = {
   async createLesson(data) {
@@ -17,25 +18,52 @@ export const lessonService = {
   },
 
   async listLessons(filter = {}) {
-    return Lesson.find(filter).sort({ order: 1, createdAt: -1 });
+    return Lesson.find(filter)
+      .sort({ order: 1, createdAt: 1 });
   },
 
   async listLessonsByCourse(courseId) {
-    return Lesson.find({ course: courseId }).sort({ order: 1 });
+    return getLessonTreeByCourse(courseId);
   },
 
   async getLessonById(id) {
-    return Lesson.findById(id);
+    return getLessonTreeById(id);
   },
 
   async updateLesson(id, payload) {
-    return Lesson.findByIdAndUpdate(id, payload, {
-      new: true,
-      runValidators: true
-    });
+    const lesson = await Lesson.findById(id);
+    if (!lesson) return null;
+
+    const oldCourseId = lesson.course?.toString();
+    const newCourseId = payload.course?.toString();
+
+    lesson.set(payload);
+    await lesson.save();
+
+    if (newCourseId && oldCourseId !== newCourseId) {
+      if (oldCourseId) {
+        await Course.findByIdAndUpdate(oldCourseId, {
+          $pull: { lessons: id },
+          $inc: { totalLessons: -1 }
+        });
+      }
+      await Course.findByIdAndUpdate(newCourseId, {
+        $addToSet: { lessons: id },
+        $inc: { totalLessons: 1 }
+      });
+    }
+
+    return lesson;
   },
 
   async deleteLesson(id) {
+    const lesson = await Lesson.findById(id);
+    if (lesson && lesson.course) {
+      await Course.findByIdAndUpdate(lesson.course, {
+        $pull: { lessons: id },
+        $inc: { totalLessons: -1 }
+      });
+    }
     return Lesson.findByIdAndDelete(id);
   }
 };

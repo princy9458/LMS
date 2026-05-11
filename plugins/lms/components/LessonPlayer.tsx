@@ -10,6 +10,10 @@ import { cn } from '@/lib/utils';
 
 const LessonPlayer = ({ lesson, syllabus, onComplete, onNext, onPrev }) => {
   if (!lesson) return null;
+  const activeTopic = lesson.topics?.[0] || null;
+  const videoUrl = activeTopic?.videoUrl || lesson.videoUrl || '';
+  const content = activeTopic?.contentHtml || activeTopic?.content || '';
+  const title = activeTopic?.title || lesson.title;
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-64px)] overflow-hidden">
@@ -17,22 +21,24 @@ const LessonPlayer = ({ lesson, syllabus, onComplete, onNext, onPrev }) => {
       <div className="flex-1 overflow-y-auto bg-background p-6 lg:p-10">
         <div className="max-w-4xl mx-auto space-y-8">
           <div className="aspect-video w-full bg-black rounded-2xl overflow-hidden shadow-2xl relative group">
-            {lesson.type === 'video' ? (
-              <div className="w-full h-full flex items-center justify-center bg-muted">
-                <PlayCircle size={80} className="text-primary/50 group-hover:text-primary transition-colors cursor-pointer" />
-                <div className="absolute bottom-6 left-6 right-6 h-1 bg-white/20 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary w-1/3" />
-                </div>
-              </div>
+            {videoUrl ? (
+              <iframe
+                className="w-full h-full border-0"
+                src={videoUrl}
+                loading="lazy"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground">
-                <p>Text content would be rendered here</p>
+              <div className="w-full h-full flex flex-col items-center justify-center bg-muted text-muted-foreground gap-3">
+                <PlayCircle size={56} className="opacity-50" />
+                <p>No video added yet</p>
               </div>
             )}
           </div>
 
           <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold tracking-tight">{lesson.title}</h1>
+            <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
             <Button onClick={onComplete} className="rounded-full gap-2 px-6">
               <CheckCircle2 size={18} /> Mark as Complete
             </Button>
@@ -40,7 +46,7 @@ const LessonPlayer = ({ lesson, syllabus, onComplete, onNext, onPrev }) => {
 
           <div className="prose prose-slate dark:prose-invert max-w-none">
             <p className="text-lg text-muted-foreground leading-relaxed">
-              {lesson.content || 'In this lesson, we cover the core concepts of the topic. Ensure you follow along with the provided materials.'}
+              {content || 'In this lesson, we cover the core concepts of the topic. Ensure you follow along with the provided materials.'}
             </p>
           </div>
 

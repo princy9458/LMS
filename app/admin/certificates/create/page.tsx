@@ -16,6 +16,13 @@ export default function CreateCertificatePage() {
     courseId: ''
   });
 
+  const activeLocale = 'en';
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[activeLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
+
   useEffect(() => {
     const fetchCourses = async () => {
       try {
@@ -99,7 +106,7 @@ export default function CreateCertificatePage() {
             >
               {courses.map((course) => (
                 <option key={course._id} value={course._id}>
-                  {course.title}
+                  {getDisplayTitle(course.title)}
                 </option>
               ))}
               {courses.length === 0 && <option value="">No courses found</option>}

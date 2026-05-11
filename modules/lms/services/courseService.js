@@ -1,4 +1,5 @@
 import Course from '@/modules/lms/models/Course';
+import { getCourseTreeById } from '@/modules/lms/utils/learningTree';
 
 export const courseService = {
   async createCourse(data) {
@@ -10,14 +11,15 @@ export const courseService = {
   },
 
   async getCourseById(id) {
-    return Course.findById(id);
+    return getCourseTreeById(id);
   },
 
   async updateCourse(id, payload) {
-    return Course.findByIdAndUpdate(id, payload, {
-      new: true,
-      runValidators: true
-    });
+    const course = await Course.findById(id);
+    if (!course) return null;
+    course.set(payload);
+    await course.save();
+    return course;
   },
 
   async deleteCourse(id) {

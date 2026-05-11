@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -27,6 +27,13 @@ export default function AdminQuizzesPage() {
   const [certificateFilter, setCertificateFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [isDeleting, setIsDeleting] = useState(false);
+  const activeLocale = 'en';
+
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[activeLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -63,7 +70,7 @@ export default function AdminQuizzesPage() {
   const courseMap = useMemo(() => {
     const map: Record<string, string> = {};
     courses.forEach((course) => {
-      map[course._id] = course.title;
+      map[course._id] = getDisplayTitle(course.title);
     });
     return map;
   }, [courses]);
@@ -71,7 +78,7 @@ export default function AdminQuizzesPage() {
   const lessonMap = useMemo(() => {
     const map: Record<string, string> = {};
     lessons.forEach((lesson) => {
-      map[lesson._id] = lesson.title;
+      map[lesson._id] = getDisplayTitle(lesson.title);
     });
     return map;
   }, [lessons]);
@@ -79,7 +86,7 @@ export default function AdminQuizzesPage() {
   const topicMap = useMemo(() => {
     const map: Record<string, string> = {};
     topics.forEach((topic) => {
-      map[topic._id] = topic.title;
+      map[topic._id] = getDisplayTitle(topic.title);
     });
     return map;
   }, [topics]);
@@ -99,7 +106,8 @@ export default function AdminQuizzesPage() {
     const lessonId = quiz.lessonId || quiz.lesson;
     const topicId = quiz.topicId || quiz.topic;
 
-    const titleMatch = quiz.title?.toLowerCase().includes(searchQuery.toLowerCase());
+    const quizTitle = getDisplayTitle(quiz.title);
+    const titleMatch = quizTitle.toLowerCase().includes(searchQuery.toLowerCase());
     const courseMatch = (courseMap[courseId] || '').toLowerCase().includes(searchQuery.toLowerCase());
     const lessonMatch = (lessonMap[lessonId] || '').toLowerCase().includes(searchQuery.toLowerCase());
     const topicMatch = (topicMap[topicId] || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -267,7 +275,7 @@ export default function AdminQuizzesPage() {
             <option value="all">All Courses</option>
             {courses.map((course) => (
               <option key={course._id} value={course._id}>
-                {course.title}
+                {getDisplayTitle(course.title)}
               </option>
             ))}
           </select>
@@ -280,7 +288,7 @@ export default function AdminQuizzesPage() {
             <option value="all">All Lessons</option>
             {lessons.map((lesson) => (
               <option key={lesson._id} value={lesson._id}>
-                {lesson.title}
+                {getDisplayTitle(lesson.title)}
               </option>
             ))}
           </select>
@@ -293,7 +301,7 @@ export default function AdminQuizzesPage() {
             <option value="all">All Topics</option>
             {topics.map((topic) => (
               <option key={topic._id} value={topic._id}>
-                {topic.title}
+                {getDisplayTitle(topic.title)}
               </option>
             ))}
           </select>
@@ -396,7 +404,7 @@ export default function AdminQuizzesPage() {
                       <td className="px-4 py-3">
                         <div className="font-semibold text-blue-600">
                           <Link href={`/admin/quizzes/${quiz._id}/edit`} className="hover:underline">
-                            {quiz.title}
+                            {getDisplayTitle(quiz.title)}
                           </Link>
                         </div>
                         <div className="text-xs text-zinc-500 mt-1 opacity-0 group-hover:opacity-100 transition">

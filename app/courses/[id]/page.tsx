@@ -7,6 +7,7 @@ import { RootState } from '@/modules/lms/store/store';
 import Link from 'next/link';
 import { CertificateModal } from '@/modules/lms/components/courses/CertificateModal';
 import { getContentLocale, getLocaleFromPathname, getLocalePath, isSupportedLocale, translateCommon } from '@/lib/i18n';
+import { readJsonResponse, unwrapApiData } from '@/lib/api';
 import { 
   PlayCircle, 
   Clock, 
@@ -22,16 +23,21 @@ import {
 
 interface Course {
   _id: string;
+  slug: string;
   title: string;
   description: string;
   instructorId: string;
   totalLessons: number;
   createdAt: string;
+  thumbnail?: string;
+  lessons?: Lesson[];
 }
 
 interface Lesson {
   _id: string;
+  slug: string;
   title: string;
+  description?: string;
   order: number;
   unlockType: string;
   unlockAfterDays?: number;
@@ -72,36 +78,49 @@ export default function CourseDetailPage() {
     const fetchCourseData = async () => {
       setLoading(true);
       try {
-        const [courseRes, lessonsRes, progressRes, certRes] = await Promise.all([
-          fetch(`/api/lms/courses/${id}?lang=${contentLocale}`),
-          fetch(`/api/lms/lessons?courseId=${id}&lang=${contentLocale}`),
-          userId ? fetch(`/api/lms/progress?userId=${userId}&courseId=${id}`) : Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: [] }) } as Response),
-          userId ? fetch(`/api/lms/certificates?userId=${userId}&courseId=${id}`) : Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, data: null }) } as Response)
-        ]);
+        const previewQuery = process.env.NODE_ENV !== 'production' ? '&preview=1' : '';
+        console.log('[CourseDetails] fetch start', { id, contentLocale, previewQuery, userId });
+        const courseRes = await fetch(`/api/lms/courses/${id}?lang=${contentLocale}${previewQuery}`);
 
-        if (!courseRes.ok || !lessonsRes.ok) {
-          console.error('Failed to fetch course data', {
-            courseId: id,
-            courseStatus: courseRes.status,
-            lessonsStatus: lessonsRes.status,
-          });
-          throw new Error('Failed to fetch course data');
+        console.log('[CourseDetails] fetch responses', {
+          courseStatus: courseRes.status,
+        });
+
+        const courseText = await courseRes.text();
+        console.log('[CourseDetails] course api raw', courseText.slice(0, 500));
+
+        if (!courseRes.ok) {
+          throw new Error(`Course API failed (${courseRes.status})`);
         }
 
-        const courseData = await courseRes.json();
-        const lessonsData = await lessonsRes.json();
-        const progressData = await progressRes.json();
-        const certData = await certRes.json();
+        const courseData = courseText ? JSON.parse(courseText) : null;
+        console.log('[CourseDetails] parsed payloads', {
+          courseHasData: Boolean(courseData),
+          courseKeys: courseData ? Object.keys(courseData) : [],
+        });
 
-        setCourse(courseData.data);
-        setLessons(lessonsData.data || []);
+        const resolvedCourse = unwrapApiData(courseData);
+        const resolvedLessons = Array.isArray((resolvedCourse as any)?.lessons) ? (resolvedCourse as any).lessons : [];
+        setCourse(resolvedCourse);
+        setLessons(resolvedLessons || []);
+
+        if (resolvedCourse?.slug && typeof id === 'string' && resolvedCourse.slug !== id) {
+          router.replace(getLocalePath(locale, `/courses/${resolvedCourse.slug}`));
+        }
         
-        if (progressData.success) {
-          setCompletedLessons(progressData.data.filter((p: any) => p.completed).map((p: any) => p.lessonId));
+        const [progressData, certData] = resolvedCourse?._id && userId
+          ? await Promise.all([
+              readJsonResponse(await fetch(`/api/lms/progress?userId=${userId}&courseId=${resolvedCourse._id}`)),
+              readJsonResponse(await fetch(`/api/lms/certificates?userId=${userId}&courseId=${resolvedCourse._id}`))
+            ])
+          : [null, null];
+
+        if ((progressData as any)?.success) {
+          setCompletedLessons((unwrapApiData(progressData) || []).filter((p: any) => p.completed).map((p: any) => p.lessonId));
         }
 
-        if (certData.success) {
-          setCertificate(certData.data);
+        if ((certData as any)?.success) {
+          setCertificate(unwrapApiData(certData));
         }
       } catch (err: any) {
         console.error('Error fetching course detail:', { courseId: id, error: err });
@@ -112,7 +131,7 @@ export default function CourseDetailPage() {
     };
 
     if (id) fetchCourseData();
-  }, [contentLocale, id, userId]);
+  }, [contentLocale, id, locale, router, userId]);
 
   const handleClaimCertificate = async () => {
     if (!course || !userId) return;
@@ -172,32 +191,54 @@ export default function CourseDetailPage() {
       {/* Course Header */}
       <div className="bg-slate-900 text-white py-16 lg:py-24">
         <div className="container max-w-7xl mx-auto px-4 md:px-6">
-          <div className="flex flex-col gap-6 max-w-4xl">
+          <div className="flex flex-col gap-6 max-w-5xl">
             <nav className="flex items-center gap-2 text-slate-400 text-sm font-medium mb-4">
               <Link href={getLocalePath(locale, '/courses')} className="hover:text-white transition-colors">{t('courses')}</Link>
               <ChevronRight size={14} />
               <span className="text-slate-200 truncate">{course.title}</span>
             </nav>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight">
-              {course.title}
-            </h1>
-            <p className="text-xl text-slate-300 leading-relaxed max-w-3xl">
-              {course.description}
-            </p>
-            
-            <div className="flex flex-wrap gap-6 mt-4">
-              <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
-                <User size={18} className="text-primary" />
-                <span>Instructor ID: {course.instructorId}</span>
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+              <div>
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight">
+                  {course.title}
+                </h1>
+                <p className="text-xl text-slate-300 leading-relaxed max-w-3xl mt-4">
+                  {course.description}
+                </p>
+                
+                <div className="flex flex-wrap gap-6 mt-6">
+                  <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                    <User size={18} className="text-primary" />
+                    <span>Instructor ID: {course.instructorId}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                    <Calendar size={18} className="text-primary" />
+                    <span>{t('courseDetailsStudentsLabel')}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                    <Award size={18} className="text-primary" />
+                    <span>{t('courseDetailsCertificationIncluded')}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
-                <Calendar size={18} className="text-primary" />
-                <span>{t('courseDetailsStudentsLabel')}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
-                <Award size={18} className="text-primary" />
-                <span>{t('courseDetailsCertificationIncluded')}</span>
-              </div>
+
+              {course.thumbnail ? (
+                <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/5 shadow-2xl shadow-black/20">
+                  <img
+                    src={course.thumbnail}
+                    alt={course.title}
+                    className="h-full min-h-[220px] w-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="rounded-[1.75rem] border border-white/10 bg-gradient-to-br from-blue-500/20 to-cyan-400/10 p-6 shadow-2xl shadow-black/20">
+                  <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/45">Course spotlight</p>
+                  <p className="mt-3 text-2xl font-black leading-tight">AI & Machine Learning</p>
+                  <p className="mt-4 text-sm leading-7 text-slate-300">
+                    Explore AI foundations, practical machine learning examples, and demo-ready learning content.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -246,6 +287,11 @@ export default function CourseDetailPage() {
                           </div>
                           <div>
                             <h3 className="font-bold text-lg">{lesson.title}</h3>
+                            {lesson.description && (
+                              <p className="text-sm text-muted-foreground line-clamp-1 max-w-md mt-0.5">
+                                {lesson.description}
+                              </p>
+                            )}
                             <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
                                <div className="flex items-center gap-1">
                                  <PlayCircle size={14} />
@@ -257,7 +303,7 @@ export default function CourseDetailPage() {
                           </div>
                         </div>
                         <Link 
-                          href={getLocalePath(locale, `/courses/${id}/lessons/${lesson._id}`)}
+                          href={getLocalePath(locale, `/courses/${course.slug || id}/${lesson.slug || lesson._id}`)}
                           className={`
                             p-2 rounded-full transition-all shadow-sm
                             ${isCompleted ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-slate-50 dark:bg-slate-900 text-slate-400 group-hover:bg-primary group-hover:text-white'}
@@ -321,7 +367,7 @@ export default function CourseDetailPage() {
                     </div>
                     
                     <Link 
-                      href={lessons.length > 0 ? getLocalePath(locale, `/courses/${id}/lessons/${lessons[0]._id}`) : '#'}
+                      href={lessons.length > 0 ? getLocalePath(locale, `/courses/${course.slug || id}/${lessons[0].slug || lessons[0]._id}`) : '#'}
                       className="w-full h-14 bg-primary text-primary-foreground font-bold rounded-2xl flex items-center justify-center gap-2 hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
                     >
                       {completedLessons.length > 0 ? t('continueLearning') : t('startLearningNow')}

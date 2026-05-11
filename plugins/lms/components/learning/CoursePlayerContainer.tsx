@@ -6,6 +6,7 @@ import { VideoPlayer } from './VideoPlayer';
 import { LessonSidebar } from './LessonSidebar';
 import { ChevronRight, ChevronLeft, Menu, X, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { readJsonResponse, unwrapApiData } from '@/lib/api';
 
 export function CoursePlayerContainer({ courseId, lessonId }: { courseId: string; lessonId: string }) {
   const router = useRouter();
@@ -16,24 +17,30 @@ export function CoursePlayerContainer({ courseId, lessonId }: { courseId: string
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [lessonRes, syllabusRes, enrollmentRes] = await Promise.all([
-        fetch(`/api/lms/lesson/${lessonId}`),
-        fetch(`/api/lms/courses/${courseId}/syllabus`),
-        fetch(`/api/lms/enrollment/${courseId}`)
-      ]);
+      try {
+        setLoading(true);
+        const [lessonRes, syllabusRes, enrollmentRes] = await Promise.all([
+          fetch(`/api/lms/lesson/${lessonId}`),
+          fetch(`/api/lms/courses/${courseId}/syllabus`),
+          fetch(`/api/lms/enrollment/${courseId}`)
+        ]);
 
-      const lessonData = await lessonRes.json();
-      const syllabusData = await syllabusRes.json();
-      const enrollmentData = await enrollmentRes.json();
+        const [lessonPayload, syllabusPayload, enrollmentPayload] = await Promise.all([
+          readJsonResponse(lessonRes),
+          readJsonResponse(syllabusRes),
+          readJsonResponse(enrollmentRes),
+        ]);
 
-      setLesson(lessonData);
-      setSyllabus(syllabusData);
-      setEnrollment(enrollmentData);
-      setLoading(false);
-    } catch (err) {
-      console.error('Failed to fetch player data', err);
+        const lessonData = unwrapApiData(lessonPayload);
+        const syllabusData = unwrapApiData(syllabusPayload);
+        const enrollmentData = unwrapApiData(enrollmentPayload);
+
+        setLesson(lessonData);
+        setSyllabus(Array.isArray(syllabusData) ? syllabusData : syllabusData?.lessons ? [syllabusData] : []);
+        setEnrollment(enrollmentData);
+        setLoading(false);
+      } catch (err) {
+        console.error('Failed to fetch player data', err);
       setLoading(false);
     }
   }, [courseId, lessonId]);
@@ -49,12 +56,12 @@ export function CoursePlayerContainer({ courseId, lessonId }: { courseId: string
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ courseId, lessonId, status: 'completed' })
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       
       // Update local enrollment state to show progress change
-      if (data.progress) setEnrollment(data.progress);
+      if (data?.progress) setEnrollment(data.progress);
       
-      if (data.nextLessonId) {
+      if (data?.nextLessonId) {
         router.push(`/lms/learn/${courseId}/lesson/${data.nextLessonId}`);
       }
     } catch (err) {
@@ -69,6 +76,10 @@ export function CoursePlayerContainer({ courseId, lessonId }: { courseId: string
   const currentIndex = flatLessons.findIndex((l: any) => l._id === lessonId);
   const prevLesson = currentIndex > 0 ? flatLessons[currentIndex - 1] : null;
   const nextLesson = currentIndex !== -1 && currentIndex < flatLessons.length - 1 ? flatLessons[currentIndex + 1] : null;
+  const activeTopic = lesson?.topics?.[0] || null;
+  const playerUrl = activeTopic?.videoUrl || lesson?.videoUrl || '';
+  const articleContent = activeTopic?.contentHtml || activeTopic?.content || lesson?.content || '';
+  const headerTitle = activeTopic?.title || lesson?.title || 'Lesson';
 
   if (loading) {
     return (
@@ -94,7 +105,7 @@ export function CoursePlayerContainer({ courseId, lessonId }: { courseId: string
           </button>
           <div className="flex flex-col">
             <span className="text-[10px] uppercase tracking-widest font-bold text-zinc-500">Learning Path</span>
-            <h1 className="text-sm font-semibold truncate max-w-[300px]">{lesson.title}</h1>
+            <h1 className="text-sm font-semibold truncate max-w-[300px]">{headerTitle}</h1>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -130,7 +141,7 @@ export function CoursePlayerContainer({ courseId, lessonId }: { courseId: string
             {/* Player Area */}
             <div className="aspect-video bg-black relative shadow-2xl overflow-hidden group">
               <VideoPlayer 
-                url={lesson.videoUrl} 
+                url={playerUrl} 
                 onEnded={handleMarkComplete}
               />
             </div>
@@ -139,7 +150,7 @@ export function CoursePlayerContainer({ courseId, lessonId }: { courseId: string
             <div className="max-w-4xl mx-auto w-full px-6 py-10">
               <div className="flex items-center justify-between mb-8">
                 <div className="flex flex-col gap-1">
-                  <h2 className="text-3xl font-bold tracking-tight">{lesson.title}</h2>
+                  <h2 className="text-3xl font-bold tracking-tight">{headerTitle}</h2>
                   <p className="text-zinc-500 text-sm">Last updated March 2026</p>
                 </div>
                 <button 
@@ -152,8 +163,8 @@ export function CoursePlayerContainer({ courseId, lessonId }: { courseId: string
               </div>
 
               <div className="prose prose-invert prose-blue max-w-none prose-sm leading-relaxed text-zinc-300">
-                {lesson.content ? (
-                   <div dangerouslySetInnerHTML={{ __html: lesson.content }} />
+                {articleContent ? (
+                   <div dangerouslySetInnerHTML={{ __html: articleContent }} />
                 ) : (
                   <p className="italic text-zinc-500">No additional content provided for this lesson.</p>
                 )}

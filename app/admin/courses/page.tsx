@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -18,6 +18,13 @@ export default function AdminCoursesPage() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const activeLocale = 'en';
+
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[activeLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
 
   const fetchCourses = async () => {
     try {
@@ -46,7 +53,8 @@ export default function AdminCoursesPage() {
   }, [courses]);
 
   const filteredCourses = courses.filter((course) => {
-    const matchesSearch = course.title?.toLowerCase().includes(searchQuery.toLowerCase());
+    const courseTitle = getDisplayTitle(course.title);
+    const matchesSearch = courseTitle.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || course.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });
@@ -229,12 +237,11 @@ export default function AdminCoursesPage() {
                           )}
                         </div>
                         <div>
-                          <Link
-                            href={getLocalePath(locale, `/admin/courses/${course._id}/edit`)}
-                            className="font-semibold text-blue-600 hover:underline"
-                          >
-                            {course.title}
-                          </Link>
+                          <div className="font-semibold text-blue-600">
+                            <Link href={`/admin/courses/${course._id}/edit`} className="hover:underline">
+                              {getDisplayTitle(course.title)}
+                            </Link>
+                          </div>
                           <div className="text-xs text-zinc-500 mt-1 flex items-center gap-2">
                             <Link href={getLocalePath(locale, `/admin/courses/${course._id}/edit`)} className="hover:underline">
                               Edit

@@ -8,6 +8,10 @@ const CertificateSchema = new mongoose.Schema({
   description: {
     type: String,
   },
+  translations: {
+    type: Object,
+    default: {},
+  },
   templateUrl: {
     type: String,
   },

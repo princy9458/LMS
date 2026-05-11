@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Lesson from '../models/Lesson';
 import Topic from '../models/Topic';
 import Quiz from '../models/Quiz';
@@ -11,7 +12,11 @@ export const lmsService = {
     return await Course.create({ ...data, tenant: tenantId });
   },
   async updateCourse(id, data) {
-    return await Course.findByIdAndUpdate(id, data, { new: true });
+    const course = await Course.findById(id);
+    if (!course) return null;
+    course.set(data);
+    await course.save();
+    return course;
   },
   async deleteCourse(id) {
     // In a real app, handle cascading deletes or archiving
@@ -23,7 +28,11 @@ export const lmsService = {
     return await Lesson.create({ ...data, tenant: tenantId });
   },
   async updateLesson(id, data) {
-    return await Lesson.findByIdAndUpdate(id, data, { new: true });
+    const lesson = await Lesson.findById(id);
+    if (!lesson) return null;
+    lesson.set(data);
+    await lesson.save();
+    return lesson;
   },
   async deleteLesson(id) {
     return await Lesson.findByIdAndDelete(id);
@@ -37,7 +46,11 @@ export const lmsService = {
     return await Topic.create({ ...data, tenant: tenantId });
   },
   async updateTopic(id, data) {
-    return await Topic.findByIdAndUpdate(id, data, { new: true });
+    const topic = await Topic.findById(id);
+    if (!topic) return null;
+    topic.set(data);
+    await topic.save();
+    return topic;
   },
   async deleteTopic(id) {
     return await Topic.findByIdAndDelete(id);
@@ -51,7 +64,11 @@ export const lmsService = {
     return await Quiz.create({ ...data, tenant: tenantId });
   },
   async updateQuiz(id, data) {
-    return await Quiz.findByIdAndUpdate(id, data, { new: true });
+    const quiz = await Quiz.findById(id);
+    if (!quiz) return null;
+    quiz.set(data);
+    await quiz.save();
+    return quiz;
   },
   async deleteQuiz(id) {
     return await Quiz.findByIdAndDelete(id);

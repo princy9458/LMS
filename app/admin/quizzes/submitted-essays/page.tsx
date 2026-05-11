@@ -12,6 +12,13 @@ export default function QuizSubmittedEssaysPage() {
   const [quizzes, setQuizzes] = useState<any[]>([]);
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const activeLocale = 'en';
+
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[activeLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
 
   useEffect(() => {
     const fetchFilters = async () => {
@@ -87,7 +94,7 @@ export default function QuizSubmittedEssaysPage() {
             <option>All Courses</option>
             {courses.map((course) => (
               <option key={course._id} value={course._id}>
-                {course.title}
+                {getDisplayTitle(course.title)}
               </option>
             ))}
           </select>
@@ -95,7 +102,7 @@ export default function QuizSubmittedEssaysPage() {
             <option>All Lessons</option>
             {lessons.map((lesson) => (
               <option key={lesson._id} value={lesson._id}>
-                {lesson.title}
+                {getDisplayTitle(lesson.title)}
               </option>
             ))}
           </select>
@@ -103,7 +110,7 @@ export default function QuizSubmittedEssaysPage() {
             <option>All Topics</option>
             {topics.map((topic) => (
               <option key={topic._id} value={topic._id}>
-                {topic.title}
+                {getDisplayTitle(topic.title)}
               </option>
             ))}
           </select>
@@ -111,7 +118,7 @@ export default function QuizSubmittedEssaysPage() {
             <option>All Quizzes</option>
             {quizzes.map((quiz) => (
               <option key={quiz._id} value={quiz._id}>
-                {quiz.title}
+                {getDisplayTitle(quiz.title)}
               </option>
             ))}
           </select>
@@ -119,7 +126,7 @@ export default function QuizSubmittedEssaysPage() {
             <option>All Questions</option>
             {questions.map((question) => (
               <option key={question._id} value={question._id}>
-                {question.text || question.questionText}
+                {getDisplayTitle(question.text || question.questionText)}
               </option>
             ))}
           </select>

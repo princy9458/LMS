@@ -1,12 +1,29 @@
 import Link from 'next/link';
 import { getCommonMessages, getLocalePath, isSupportedLocale } from '@/lib/i18n';
+import { buildLocalizedMetadata } from '@/lib/seo';
+
+export function generateMetadata({
+  params,
+}: {
+  params: { locale: string };
+}) {
+  const locale = isSupportedLocale(params.locale) ? params.locale : 'en';
+  const messages = getCommonMessages(locale);
+
+  return buildLocalizedMetadata({
+    locale,
+    pathname: '/',
+    title: `LMS One Platform | ${messages.welcome}`,
+    description: messages.homeSubtitle,
+  });
+}
 
 export default async function LocalizedHome({
   params,
 }: {
-  params: Promise<{ locale: string }>;
+  params: { locale: string };
 }) {
-  const { locale } = await params;
+  const { locale } = params;
   const messages = getCommonMessages(isSupportedLocale(locale) ? locale : 'en');
 
   return (

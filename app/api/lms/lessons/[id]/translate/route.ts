@@ -24,9 +24,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         { status: 404 }
       );
     }
-    const normalizedContent = normalizeLocalizedField(lesson.content);
+    const normalizedTitle = normalizeLocalizedField(lesson.title);
 
-    if (normalizedContent[targetLocale]) {
+    if (normalizedTitle[targetLocale]) {
       return NextResponse.json({
         success: true,
         data: localizeLessonDocument(lesson, targetLocale),
@@ -35,8 +35,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       });
     }
 
-    const translatedContent = await translateLessonContent({
-      content: lesson.content,
+    const translatedTitle = await translateLessonContent({
+      content: lesson.title,
       targetLocale,
     });
 
@@ -44,9 +44,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const localizedLesson = localizeLessonDocument(
         {
           ...lesson.toObject({ virtuals: true }),
-          content: {
-            ...normalizedContent,
-            [targetLocale]: translatedContent,
+          title: {
+            ...normalizedTitle,
+            [targetLocale]: translatedTitle,
           },
         },
         targetLocale
@@ -57,8 +57,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const payload = prepareLessonWritePayload(
       {
-        content: {
-          [targetLocale]: translatedContent,
+        title: {
+          [targetLocale]: translatedTitle,
         },
       },
       lesson

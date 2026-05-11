@@ -79,6 +79,13 @@ export default function CourseBuilderPage() {
   const [activeQuestionQuizId, setActiveQuestionQuizId] = useState<string | null>(null);
   const [newQuestionText, setNewQuestionText] = useState('');
   const [questionSubmitting, setQuestionSubmitting] = useState(false);
+  const activeLocale = 'en';
+
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[activeLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
 
   useEffect(() => {
     if (courseId) {
@@ -434,7 +441,7 @@ export default function CourseBuilderPage() {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="text-xl font-bold text-zinc-900 tracking-tight">{course?.title}</h1>
+              <h1 className="text-xl font-bold text-zinc-900 tracking-tight">{getDisplayTitle(course?.title)}</h1>
               <p className="text-sm text-zinc-500">
                 Lessons ({lessons.length}) - Topics ({topicCount})
               </p>
@@ -507,7 +514,7 @@ export default function CourseBuilderPage() {
                               <BookOpen className="w-4 h-4" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <h3 className="text-sm font-semibold text-zinc-900 truncate">{lesson.title}</h3>
+                              <h3 className="text-sm font-semibold text-zinc-900 truncate">{getDisplayTitle(lesson.title)}</h3>
                               <p className="text-xs text-zinc-500">
                                 {(topicsByLesson[lesson._id] || []).length} Topics
                               </p>
@@ -579,7 +586,7 @@ export default function CourseBuilderPage() {
                                               {expandedTopics[topic._id] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                                             </button>
                                             <FileText className="w-4 h-4 text-emerald-500" />
-                                            <span className="text-sm font-medium text-zinc-700 flex-1 truncate">{topic.title}</span>
+                                            <span className="text-sm font-medium text-zinc-700 flex-1 truncate">{getDisplayTitle(topic.title)}</span>
                                             <div className="flex items-center gap-1">
                                               <button
                                                 onClick={() => setActiveQuizTopicId(activeQuizTopicId === topic._id ? null : topic._id)}
@@ -633,7 +640,7 @@ export default function CourseBuilderPage() {
                                                       {expandedQuizzes[quiz._id] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                                                     </button>
                                                     <HelpCircle className="w-4 h-4 text-amber-500" />
-                                                    <span className="text-sm font-medium text-zinc-700 flex-1 truncate">{quiz.title}</span>
+                                                    <span className="text-sm font-medium text-zinc-700 flex-1 truncate">{getDisplayTitle(quiz.title)}</span>
                                                     <div className="flex items-center gap-1">
                                                       <button
                                                         onClick={() => setActiveQuestionQuizId(activeQuestionQuizId === quiz._id ? null : quiz._id)}
@@ -683,7 +690,7 @@ export default function CourseBuilderPage() {
                                                       {(questionsByQuiz[quiz._id] || []).map((question) => (
                                                         <div key={question._id} className="flex items-center gap-3 p-2 bg-white border border-zinc-100 rounded-lg">
                                                           <span className="text-sm font-medium text-zinc-700 flex-1 truncate">
-                                                            {question.text || question.questionText || 'Untitled question'}
+                                                            {getDisplayTitle(question.text || question.questionText) || 'Untitled question'}
                                                           </span>
                                                           <div className="flex items-center gap-1">
                                                             <Link

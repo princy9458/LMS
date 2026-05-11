@@ -8,6 +8,7 @@ import {
   prepareCourseWritePayload,
 } from '@/modules/lms/utils/courseLocalization';
 import mongoose from 'mongoose';
+import { normalizeCourseTree } from '@/modules/lms/utils/learningTree';
 
 export async function listCourses(request) {
   await dbConnect();
@@ -37,7 +38,7 @@ export async function getCourse(request, { params }) {
     return json({ success: false, error: 'Course not found' }, 404);
   }
 
-  return json({ success: true, data: localizeCourseDocument(course, locale) });
+  return json({ success: true, data: normalizeCourseTree(course, locale) });
 }
 
 export async function createCourse(request) {

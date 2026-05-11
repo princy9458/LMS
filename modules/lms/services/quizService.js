@@ -34,10 +34,11 @@ export const quizService = {
   },
 
   async updateQuiz(id, payload) {
-    return Quiz.findByIdAndUpdate(id, payload, {
-      new: true,
-      runValidators: true
-    });
+    const quiz = await Quiz.findById(id);
+    if (!quiz) return null;
+    quiz.set(payload);
+    await quiz.save();
+    return quiz;
   },
 
   async deleteQuiz(id) {

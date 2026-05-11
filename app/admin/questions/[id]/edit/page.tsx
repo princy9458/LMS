@@ -6,6 +6,9 @@ import Link from 'next/link';
 import { HelpCircle, AlertCircle, Loader2, Save, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { CONTENT_LANGUAGES } from '@/config/contentLanguages';
+import AdminLocaleSelector from '@/components/admin/AdminLocaleSelector';
+import { getLocaleCompletion } from '@/lib/adminLocale';
+import { useAdminLocale } from '@/components/admin/AdminLocaleProvider';
 
 const createLocalizedValues = (translations: Record<string, string> = {}) =>
   Object.fromEntries(CONTENT_LANGUAGES.map((language) => [language.code, translations[language.code] || '']));
@@ -19,11 +22,19 @@ export default function AdminQuestionEditPage() {
   const router = useRouter();
   const params = useParams();
   const id = (params as { id?: string })?.id;
+  const { locale: activeLocale, setLocale } = useAdminLocale();
+  const activeLanguage = CONTENT_LANGUAGES.find((language) => language.code === activeLocale) || CONTENT_LANGUAGES[0];
 
   const [courses, setCourses] = useState<any[]>([]);
   const [lessons, setLessons] = useState<any[]>([]);
   const [topics, setTopics] = useState<any[]>([]);
   const [quizzes, setQuizzes] = useState<any[]>([]);
+
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[activeLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -287,27 +298,26 @@ export default function AdminQuestionEditPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-semibold text-zinc-900">Question Text</label>
-              <div className="grid gap-3 md:grid-cols-2">
-                {CONTENT_LANGUAGES.map((language) => (
-                  <div key={language.code} className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                      {language.label}
-                    </label>
-                    <input
-                      value={formData.text[language.code] || ''}
-                      onChange={(e) => setFormData((prev) => ({
-                        ...prev,
-                        text: {
-                          ...prev.text,
-                          [language.code]: e.target.value,
-                        },
-                      }))}
-                      className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900"
-                      required={language.code === 'en'}
-                    />
-                  </div>
-                ))}
+              <AdminLocaleSelector
+                value={activeLocale}
+                onChange={setLocale}
+                completion={getLocaleCompletion(formData.text)}
+              />
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 space-y-3">
+                <label className="text-sm font-semibold text-zinc-900">{activeLanguage.label}</label>
+                <input
+                  value={formData.text[activeLocale] || ''}
+                  onChange={(e) => setFormData((prev) => ({
+                    ...prev,
+                    text: {
+                      ...prev.text,
+                      [activeLocale]: e.target.value,
+                    },
+                  }))}
+                  className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900"
+                  required={activeLocale === 'en'}
+                  placeholder={`Question text (${activeLanguage.label})`}
+                />
               </div>
             </div>
 
@@ -326,7 +336,7 @@ export default function AdminQuestionEditPage() {
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900"
               >
                 {courses.map((course) => (
-                  <option key={course._id} value={course._id}>{course.title}</option>
+                  <option key={course._id} value={course._id}>{getDisplayTitle(course.title)}</option>
                 ))}
                 <option value="__add__">➕ Add New Course</option>
               </select>
@@ -347,7 +357,7 @@ export default function AdminQuestionEditPage() {
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900"
               >
                 {lessons.map((lesson) => (
-                  <option key={lesson._id} value={lesson._id}>{lesson.title}</option>
+                  <option key={lesson._id} value={lesson._id}>{getDisplayTitle(lesson.title)}</option>
                 ))}
                 {formData.courseId && <option value="__add__">➕ Add New Lesson</option>}
               </select>
@@ -368,7 +378,7 @@ export default function AdminQuestionEditPage() {
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900"
               >
                 {topics.map((topic) => (
-                  <option key={topic._id} value={topic._id}>{topic.title}</option>
+                  <option key={topic._id} value={topic._id}>{getDisplayTitle(topic.title)}</option>
                 ))}
                 {formData.lessonId && <option value="__add__">➕ Add New Topic</option>}
               </select>
@@ -389,7 +399,7 @@ export default function AdminQuestionEditPage() {
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900"
               >
                 {quizzes.map((quiz) => (
-                  <option key={quiz._id} value={quiz._id}>{quiz.title}</option>
+                  <option key={quiz._id} value={quiz._id}>{getDisplayTitle(quiz.title)}</option>
                 ))}
                 {formData.topicId && <option value="__add__">➕ Add New Quiz</option>}
               </select>
@@ -430,22 +440,18 @@ export default function AdminQuestionEditPage() {
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {CONTENT_LANGUAGES.map((language) => (
-                      <div key={language.code} className="space-y-2">
-                        <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                          {language.label}
-                        </label>
-                        <input
-                          type="text"
-                          value={answer.text[language.code] || ''}
-                          onChange={(e) => updateAnswer(index, { locale: language.code, value: e.target.value })}
-                          className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
-                          placeholder={`Answer ${index + 1} (${language.label})`}
-                          required={language.code === 'en'}
-                        />
-                      </div>
-                    ))}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      {activeLanguage.label}
+                    </label>
+                    <input
+                      type="text"
+                      value={answer.text[activeLocale] || ''}
+                      onChange={(e) => updateAnswer(index, { locale: activeLocale, value: e.target.value })}
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
+                      placeholder={`Answer ${index + 1} (${activeLanguage.label})`}
+                      required={activeLocale === 'en'}
+                    />
                   </div>
                 </div>
               ))}

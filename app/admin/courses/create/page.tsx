@@ -1,25 +1,38 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { BookOpen, AlertCircle, Plus, Loader2, Image as ImageIcon, Trash2, Zap } from 'lucide-react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { CONTENT_LANGUAGES } from '@/config/contentLanguages';
+import AdminLocaleSelector from '@/components/admin/AdminLocaleSelector';
 import { autofillHindiTranslation } from '@/lib/hindiTranslation';
 import { getLocaleFromPathname, getLocalePath } from '@/lib/i18n';
+import { useAdminLocale } from '@/components/admin/AdminLocaleProvider';
 
 const createLocalizedValues = () =>
   Object.fromEntries(CONTENT_LANGUAGES.map((language) => [language.code, '']));
 
+const toSlug = (value: string) =>
+  String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
 export default function AdminCourseCreatePage() {
   const router = useRouter();
   const pathname = usePathname();
+  const { locale: activeLocale, setLocale } = useAdminLocale();
   const locale = getLocaleFromPathname(pathname);
   const adminCoursesPath = getLocalePath(locale, '/admin/courses');
   
   const [formData, setFormData] = useState({
     title: createLocalizedValues(),
+    slug: '',
     description: createLocalizedValues(),
     instructorName: '',
     instructorId: '65f01234567890abcdef1234', // Mock instructor
@@ -30,6 +43,7 @@ export default function AdminCourseCreatePage() {
     skillsEarned: '',
     attributes: [] as { key: string; value: Record<string, string> }[],
   });
+  const [slugEdited, setSlugEdited] = useState(false);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +61,7 @@ export default function AdminCourseCreatePage() {
 
       const payload = {
         ...formData,
+        slug: formData.slug || toSlug(formData.title.en || ''),
         skillsEarned: skillsArray,
         totalLessons: parseInt(formData.totalLessons.toString()) || 0,
         attributes: formData.attributes
@@ -90,6 +105,7 @@ export default function AdminCourseCreatePage() {
 
       return {
         ...prev,
+        slug: field === 'title' && locale === 'en' && !slugEdited ? toSlug(value) : prev.slug,
         [field]: locale === 'en' ? autofillHindiTranslation(nextFieldValue) : nextFieldValue,
       };
     });
@@ -125,6 +141,20 @@ export default function AdminCourseCreatePage() {
     });
   };
 
+  const handleThumbnailFile = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormData((prev) => ({
+        ...prev,
+        thumbnail: typeof reader.result === 'string' ? reader.result : prev.thumbnail,
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const activeLanguage = CONTENT_LANGUAGES.find((language) => language.code === activeLocale) || CONTENT_LANGUAGES[0];
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
@@ -151,28 +181,28 @@ export default function AdminCourseCreatePage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4 md:col-span-2">
-              <label className="text-sm font-semibold text-zinc-900">Multilingual Course Metadata</label>
-              <div className="grid grid-cols-1 gap-4">
-                {CONTENT_LANGUAGES.map((language) => (
-                  <div key={language.code} className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 space-y-3">
-                    <p className="text-sm font-semibold text-zinc-900">{language.label}</p>
-                    <input
-                      required={language.code === 'en'}
-                      value={formData.title[language.code]}
-                      onChange={(e) => handleLocalizedChange('title', language.code, e.target.value)}
-                      placeholder={`Course title (${language.label})`}
-                      className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-medium"
-                    />
-                    <textarea
-                      required={language.code === 'en'}
-                      rows={3}
-                      value={formData.description[language.code]}
-                      onChange={(e) => handleLocalizedChange('description', language.code, e.target.value)}
-                      placeholder={`Course description (${language.label})`}
-                      className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                    />
-                  </div>
-                ))}
+              <AdminLocaleSelector
+                value={activeLocale}
+                onChange={(value) => setLocale(value)}
+              />
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 space-y-3 transition-all duration-300">
+                <p className="text-sm font-semibold text-zinc-900">{activeLanguage.label}</p>
+                <input
+                  required={activeLocale === 'en'}
+                  value={formData.title[activeLocale] || ''}
+                  onChange={(e) => handleLocalizedChange('title', activeLocale, e.target.value)}
+                  placeholder={`Course title (${activeLanguage.label})`}
+                  className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-medium"
+                />
+                <textarea
+                  required={activeLocale === 'en'}
+                  rows={3}
+                  value={formData.description[activeLocale] || ''}
+                  onChange={(e) => handleLocalizedChange('description', activeLocale, e.target.value)}
+                  placeholder={`Course description (${activeLanguage.label})`}
+                  className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                />
+                <p className="text-xs text-zinc-500">Missing locales automatically fall back to English on the learner side.</p>
               </div>
             </div>
 
@@ -186,6 +216,21 @@ export default function AdminCourseCreatePage() {
                 required
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
               />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm font-semibold text-zinc-900">Slug</label>
+              <input
+                name="slug"
+                value={formData.slug}
+                onChange={(e) => {
+                  setSlugEdited(true);
+                  setFormData((prev) => ({ ...prev, slug: toSlug(e.target.value) }));
+                }}
+                placeholder="ai-machine-learning"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-mono"
+              />
+              <p className="text-xs text-zinc-500">Auto-generated from the English title unless you override it here.</p>
             </div>
 
             <div className="space-y-2">
@@ -229,18 +274,44 @@ export default function AdminCourseCreatePage() {
               />
             </div>
 
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-semibold text-zinc-900">Thumbnail URL</label>
-              <div className="flex relative">
-                <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 w-5 h-5" />
-                <input
-                  name="thumbnail"
-                  type="url"
-                  value={formData.thumbnail}
-                  onChange={handleChange}
-                  placeholder="https://example.com/image.jpg"
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-11 pr-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                />
+            <div className="space-y-3 md:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-sm font-semibold text-zinc-900">Course Thumbnail</label>
+                <span className="text-xs text-zinc-500">Image only, used for preview cards.</span>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+                <div className="space-y-3">
+                  <div className="flex relative">
+                    <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 w-5 h-5" />
+                    <input
+                      name="thumbnail"
+                      type="url"
+                      value={formData.thumbnail}
+                      onChange={handleChange}
+                      placeholder="Paste an image URL"
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-11 pr-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                    />
+                  </div>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 transition">
+                    <Plus className="w-4 h-4" />
+                    Upload image
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleThumbnailFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                </div>
+                <div className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 min-h-[140px]">
+                  {formData.thumbnail ? (
+                    <img src={formData.thumbnail} alt="Course thumbnail preview" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full min-h-[140px] items-center justify-center px-4 text-center text-sm text-zinc-500">
+                      Thumbnail preview will appear here
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -275,11 +346,11 @@ export default function AdminCourseCreatePage() {
               {formData.attributes.length > 0 ? (
                 <div className="space-y-4">
                   {formData.attributes.map((attr, index) => (
-                    <div key={index} className="rounded-2xl border border-zinc-200 bg-zinc-50/40 p-5 space-y-4 relative overflow-hidden group">
-                      <div className="flex items-center justify-between border-b border-zinc-200/60 pb-3">
-                        <input
-                          placeholder="Attribute Name (e.g. Duration)"
-                          value={attr.key}
+                      <div key={index} className="rounded-2xl border border-zinc-200 bg-zinc-50/40 p-5 space-y-4 relative overflow-hidden group">
+                        <div className="flex items-center justify-between border-b border-zinc-200/60 pb-3">
+                          <input
+                            placeholder="Attribute Name (e.g. Duration)"
+                            value={attr.key}
                           onChange={(e) => handleAttributeKeyChange(index, e.target.value)}
                           className="bg-transparent border-none p-0 text-sm font-bold text-zinc-900 placeholder:text-zinc-400 focus:ring-0 w-full"
                         />
@@ -292,20 +363,16 @@ export default function AdminCourseCreatePage() {
                         </button>
                       </div>
                       
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {CONTENT_LANGUAGES.map((language) => (
-                          <div key={language.code} className="space-y-1.5">
-                            <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 flex items-center gap-1">
-                              {language.label}
-                            </label>
-                            <input
-                              value={attr.value[language.code]}
-                              onChange={(e) => handleAttributeValueChange(index, language.code, e.target.value)}
-                              placeholder={`Value in ${language.label}`}
-                              className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
-                            />
-                          </div>
-                        ))}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase tracking-wider font-bold text-zinc-500 flex items-center gap-1">
+                          {activeLanguage.label}
+                        </label>
+                        <input
+                          value={attr.value[activeLocale] || ''}
+                          onChange={(e) => handleAttributeValueChange(index, activeLocale, e.target.value)}
+                          placeholder={`Value in ${activeLanguage.label}`}
+                          className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm"
+                        />
                       </div>
                     </div>
                   ))}

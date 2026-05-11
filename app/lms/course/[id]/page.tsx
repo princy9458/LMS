@@ -132,7 +132,7 @@ export default function CourseDetails() {
                       className="p-4 px-6 flex items-center justify-between hover:bg-muted/30 cursor-pointer transition-colors border-b last:border-0"
                     >
                       <div className="flex items-center gap-4">
-                        {lesson.isPreview ? (
+                        {lesson.unlockType === 'none' ? (
                           <PlayCircle size={18} className="text-primary" />
                         ) : (
                           <Lock size={18} className="text-muted-foreground/50" />
@@ -141,7 +141,7 @@ export default function CourseDetails() {
                       </div>
                       <div className="flex items-center gap-4">
                         <span className="text-xs text-muted-foreground">8:45</span>
-                        {lesson.isPreview && <Badge variant="secondary" className="text-[10px] h-5 px-1.5 uppercase font-bold tracking-tighter">Preview</Badge>}
+                        {lesson.unlockType === 'none' && <Badge variant="secondary" className="text-[10px] h-5 px-1.5 uppercase font-bold tracking-tighter">Open</Badge>}
                       </div>
                     </div>
                   ))}

@@ -21,7 +21,7 @@ export const courseService = {
         path: 'modules',
         populate: {
           path: 'lessons',
-          select: 'title type duration isPreview'
+          select: 'title order unlockType unlockAfterDays course'
         }
       })
       .populate('instructor', 'name email');

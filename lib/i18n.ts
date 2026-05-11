@@ -25,6 +25,11 @@ export function isSupportedLocale(value: string): value is Locale {
   return locales.includes(value);
 }
 
+export function isRtlLocale(value?: string | null) {
+  const locale = value?.trim().toLowerCase();
+  return locale === 'ar' || locale === 'he' || locale === 'fa' || locale === 'ur';
+}
+
 export function normalizeLocale(value?: string | null): Locale {
   const locale = value?.trim().toLowerCase();
   return locale && isSupportedLocale(locale) ? locale : defaultLocale;

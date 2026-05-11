@@ -6,6 +6,9 @@ import { HelpCircle, AlertCircle, Plus, Loader2, ListOrdered, CheckCircle2, X } 
 import Link from 'next/link';
 import { CONTENT_LANGUAGES } from '@/config/contentLanguages';
 import { getLocaleFromPathname, getLocalePath } from '@/lib/i18n';
+import AdminLocaleSelector from '@/components/admin/AdminLocaleSelector';
+import { getLocaleCompletion } from '@/lib/adminLocale';
+import { useAdminLocale } from '@/components/admin/AdminLocaleProvider';
 
 type LocalizedInput = Record<(typeof CONTENT_LANGUAGES)[number]['code'], string>;
 
@@ -28,16 +31,27 @@ const createQuestion = (): QuizQuestionInput => ({
   explanation: createLocalizedValues(),
 });
 
+const toSlug = (value: string) =>
+  String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
 export default function AdminQuizCreatePage() {
   const router = useRouter();
   const pathname = usePathname();
   const locale = getLocaleFromPathname(pathname);
+  const { locale: activeLocale, setLocale } = useAdminLocale();
   const [courses, setCourses] = useState<any[]>([]);
   const [lessons, setLessons] = useState<any[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(true);
   
   const [formData, setFormData] = useState({
     title: createLocalizedValues(),
+    slug: '',
     description: createLocalizedValues(),
     courseId: '',
     lessonId: '',
@@ -48,6 +62,15 @@ export default function AdminQuizCreatePage() {
   
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeLanguage = CONTENT_LANGUAGES.find((language) => language.code === activeLocale) || CONTENT_LANGUAGES[0];
+  const [slugEdited, setSlugEdited] = useState(false);
+  const activeLocaleVal = 'en';
+
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[activeLocaleVal] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -95,6 +118,7 @@ export default function AdminQuizCreatePage() {
   ) => {
     setFormData((prev) => ({
       ...prev,
+      slug: field === 'title' && language === 'en' && !slugEdited ? toSlug(value) : prev.slug,
       [field]: {
         ...prev[field],
         [language]: value,
@@ -194,7 +218,10 @@ export default function AdminQuizCreatePage() {
       const res = await fetch('/api/lms/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          slug: formData.slug || toSlug(formData.title.en || ''),
+        }),
       });
 
       const data = await res.json();
@@ -221,29 +248,52 @@ export default function AdminQuizCreatePage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8 pb-20">
-        <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-6 space-y-6">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm p-6 space-y-6">
           <div className="space-y-4">
-            <label className="text-sm font-semibold text-zinc-900">Multilingual Quiz Details</label>
-            <div className="grid grid-cols-1 gap-4">
-              {CONTENT_LANGUAGES.map((language) => (
-                <div key={language.code} className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 space-y-3">
-                  <p className="text-sm font-semibold text-zinc-900">{language.label}</p>
-                  <input
-                    required={language.code === 'en'}
-                    value={formData.title[language.code]}
-                    onChange={(e) => updateLocalizedRootField('title', language.code, e.target.value)}
-                    className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
-                    placeholder={`Quiz title (${language.label})`}
-                  />
-                  <textarea
-                    value={formData.description[language.code]}
-                    onChange={(e) => updateLocalizedRootField('description', language.code, e.target.value)}
-                    className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:ring-2 focus:ring-indigo-500 transition-all min-h-24"
-                    placeholder={`Quiz description (${language.label})`}
-                  />
-                </div>
-              ))}
+            <AdminLocaleSelector
+              value={activeLocale}
+              onChange={setLocale}
+              completion={CONTENT_LANGUAGES.reduce<Record<string, 'complete' | 'partial' | 'missing'>>((acc, language) => {
+                const title = formData.title[language.code]?.trim();
+                const description = formData.description[language.code]?.trim();
+                acc[language.code] = title && description
+                  ? 'complete'
+                  : title || description || (language.code !== 'en' && formData.title.en?.trim())
+                    ? 'partial'
+                    : 'missing';
+                return acc;
+              }, {})}
+            />
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 space-y-3">
+              <p className="text-sm font-semibold text-zinc-900">{activeLanguage.label}</p>
+              <input
+                required={activeLocale === 'en'}
+                value={formData.title[activeLocale] || ''}
+                onChange={(e) => updateLocalizedRootField('title', activeLocale, e.target.value)}
+                className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
+                placeholder={`Quiz title (${activeLanguage.label})`}
+              />
+              <textarea
+                value={formData.description[activeLocale] || ''}
+                onChange={(e) => updateLocalizedRootField('description', activeLocale, e.target.value)}
+                className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:ring-2 focus:ring-indigo-500 transition-all min-h-24"
+                placeholder={`Quiz description (${activeLanguage.label})`}
+              />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-zinc-900">Slug</label>
+            <input
+              name="slug"
+              value={formData.slug}
+              onChange={(e) => {
+                setSlugEdited(true);
+                setFormData((prev) => ({ ...prev, slug: toSlug(e.target.value) }));
+              }}
+              placeholder="basic-ai-quiz"
+              className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:ring-2 focus:ring-indigo-500 font-mono"
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -256,7 +306,7 @@ export default function AdminQuizCreatePage() {
                 disabled={loadingCourses}
               >
                 {loadingCourses && <option value="">Loading courses...</option>}
-                {courses.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
+                {courses.map(c => <option key={c._id} value={c._id}>{getDisplayTitle(c.title)}</option>)}
               </select>
             </div>
 
@@ -267,7 +317,7 @@ export default function AdminQuizCreatePage() {
                 onChange={(e) => setFormData({ ...formData, lessonId: e.target.value })}
                 className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:ring-2 focus:ring-indigo-500"
               >
-                {lessons.map(l => <option key={l._id} value={l._id}>{l.title}</option>)}
+                {lessons.map(l => <option key={l._id} value={l._id}>{getDisplayTitle(l.title)}</option>)}
                 {lessons.length === 0 && <option value="">No lessons found for this course</option>}
               </select>
             </div>
@@ -325,27 +375,25 @@ export default function AdminQuizCreatePage() {
                   </button>
                 </div>
                 <div className="p-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {CONTENT_LANGUAGES.map((language) => (
-                      <div key={language.code} className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
-                        <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                          Question Prompt ({language.label})
-                        </label>
-                        <input
-                          required={language.code === 'en'}
-                          value={q.questionText[language.code]}
-                          onChange={(e) => updateQuestion(qIndex, 'questionText', language.code, e.target.value)}
-                          className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                          placeholder={`Question prompt (${language.label})`}
-                        />
-                        <textarea
-                          value={q.explanation[language.code]}
-                          onChange={(e) => updateQuestion(qIndex, 'explanation', language.code, e.target.value)}
-                          className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none min-h-24"
-                          placeholder={`Explanation (${language.label})`}
-                        />
-                      </div>
-                    ))}
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                        Question Prompt ({activeLanguage.label})
+                      </label>
+                    </div>
+                    <input
+                      required={activeLocale === 'en'}
+                      value={q.questionText[activeLocale] || ''}
+                      onChange={(e) => updateQuestion(qIndex, 'questionText', activeLocale, e.target.value)}
+                      className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                      placeholder={`Question prompt (${activeLanguage.label})`}
+                    />
+                    <textarea
+                      value={q.explanation[activeLocale] || ''}
+                      onChange={(e) => updateQuestion(qIndex, 'explanation', activeLocale, e.target.value)}
+                      className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none min-h-24"
+                      placeholder={`Explanation (${activeLanguage.label})`}
+                    />
                   </div>
 
                   <div className="space-y-4">
@@ -366,21 +414,17 @@ export default function AdminQuizCreatePage() {
                             <span className="text-sm font-medium text-zinc-700">Option {oIndex + 1}</span>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {CONTENT_LANGUAGES.map((language) => (
-                              <div key={language.code} className="space-y-2">
-                                <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                                  {language.label}
-                                </label>
-                                <input
-                                  required={language.code === 'en'}
-                                  value={opt[language.code]}
-                                  onChange={(e) => updateOption(qIndex, oIndex, language.code, e.target.value)}
-                                  className="w-full bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm"
-                                  placeholder={`Option ${oIndex + 1} (${language.label})`}
-                                />
-                              </div>
-                            ))}
+                          <div className="space-y-2">
+                            <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                              {activeLanguage.label}
+                            </label>
+                            <input
+                              required={activeLocale === 'en'}
+                              value={opt[activeLocale] || ''}
+                              onChange={(e) => updateOption(qIndex, oIndex, activeLocale, e.target.value)}
+                              className="w-full bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm"
+                              placeholder={`Option ${oIndex + 1} (${activeLanguage.label})`}
+                            />
                           </div>
                         </div>
                       ))}

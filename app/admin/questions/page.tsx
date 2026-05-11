@@ -28,6 +28,13 @@ export default function AdminQuestionsPage() {
   const [quizFilter, setQuizFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [isDeleting, setIsDeleting] = useState(false);
+  const activeLocale = 'en';
+
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[activeLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -55,7 +62,7 @@ export default function AdminQuestionsPage() {
   const quizMap = useMemo(() => {
     const map: Record<string, string> = {};
     quizzes.forEach((quiz) => {
-      map[quiz._id] = quiz.title;
+      map[quiz._id] = getDisplayTitle(quiz.title);
     });
     return map;
   }, [quizzes]);
@@ -234,7 +241,7 @@ export default function AdminQuestionsPage() {
             <option value="all">All Quizzes</option>
             {quizzes.map((quiz) => (
               <option key={quiz._id} value={quiz._id}>
-                {quiz.title}
+                {getDisplayTitle(quiz.title)}
               </option>
             ))}
           </select>

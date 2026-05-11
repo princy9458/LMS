@@ -5,18 +5,29 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { CONTENT_LANGUAGES } from '@/config/contentLanguages';
+import AdminLocaleSelector from '@/components/admin/AdminLocaleSelector';
+import { getLocaleCompletion } from '@/lib/adminLocale';
+import { useAdminLocale } from '@/components/admin/AdminLocaleProvider';
 
 const createLocalizedValues = () =>
   Object.fromEntries(CONTENT_LANGUAGES.map((language) => [language.code, '']));
 
 export default function CreateQuestionPage() {
   const [quizzes, setQuizzes] = useState<any[]>([]);
+  const { locale: activeLocale, setLocale } = useAdminLocale();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [quizId, setQuizId] = useState('');
   const [questionText, setQuestionText] = useState(createLocalizedValues());
   const [answers, setAnswers] = useState([createLocalizedValues(), createLocalizedValues()]);
   const [correctIndex, setCorrectIndex] = useState<number | null>(0);
+  const activeLanguage = CONTENT_LANGUAGES.find((language) => language.code === activeLocale) || CONTENT_LANGUAGES[0];
+
+  const getDisplayTitle = (title: any) => {
+    if (typeof title === 'string') return title;
+    if (title && typeof title === 'object') return title[activeLocale] || title.en || Object.values(title)[0] || '';
+    return '';
+  };
 
   useEffect(() => {
     const fetchQuizzes = async () => {
@@ -134,22 +145,20 @@ export default function CreateQuestionPage() {
       <div className="bg-white border border-zinc-200 rounded-md p-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-sm font-medium text-zinc-700">Question Text</label>
-            <div className="mt-2 grid gap-3 md:grid-cols-2">
-              {CONTENT_LANGUAGES.map((language) => (
-                <div key={language.code} className="space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                    {language.label}
-                  </label>
-                  <input
-                    value={questionText[language.code] || ''}
-                    required={language.code === 'en'}
-                    onChange={(e) => updateQuestionText(language.code, e.target.value)}
-                    className="w-full border border-zinc-300 rounded-md px-3 py-2 text-sm bg-white"
-                    placeholder={`Enter your question (${language.label})`}
-                  />
-                </div>
-              ))}
+            <AdminLocaleSelector
+              value={activeLocale}
+              onChange={setLocale}
+              completion={getLocaleCompletion(questionText)}
+            />
+            <div className="mt-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 space-y-3">
+              <label className="text-sm font-medium text-zinc-700">{activeLanguage.label}</label>
+              <input
+                value={questionText[activeLocale] || ''}
+                required={activeLocale === 'en'}
+                onChange={(e) => updateQuestionText(activeLocale, e.target.value)}
+                className="w-full border border-zinc-300 rounded-md px-3 py-2 text-sm bg-white"
+                placeholder={`Enter your question (${activeLanguage.label})`}
+              />
             </div>
           </div>
 
@@ -163,7 +172,7 @@ export default function CreateQuestionPage() {
             >
               {quizzes.map((quiz) => (
                 <option key={quiz._id} value={quiz._id}>
-                  {quiz.title}
+                  {getDisplayTitle(quiz.title)}
                 </option>
               ))}
               {quizzes.length === 0 && <option value="">No quizzes found</option>}
@@ -203,21 +212,17 @@ export default function CreateQuestionPage() {
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {CONTENT_LANGUAGES.map((language) => (
-                    <div key={language.code} className="space-y-2">
-                      <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                        {language.label}
-                      </label>
-                      <input
-                        value={answer[language.code] || ''}
-                        required={language.code === 'en'}
-                        onChange={(e) => updateAnswer(index, language.code, e.target.value)}
-                        className="w-full border border-zinc-300 rounded-md px-3 py-2 text-sm"
-                        placeholder={`Answer ${index + 1} (${language.label})`}
-                      />
-                    </div>
-                  ))}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    {activeLanguage.label}
+                  </label>
+                  <input
+                    value={answer[activeLocale] || ''}
+                    required={activeLocale === 'en'}
+                    onChange={(e) => updateAnswer(index, activeLocale, e.target.value)}
+                    className="w-full border border-zinc-300 rounded-md px-3 py-2 text-sm"
+                    placeholder={`Answer ${index + 1} (${activeLanguage.label})`}
+                  />
                 </div>
               </div>
             ))}

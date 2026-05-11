@@ -11,8 +11,11 @@ interface UploadUrlResponse {
  * Unified interface for S3, Cloudflare Stream, or Mux.
  */
 export const videoService = {
-  async getStreamingUrl(lesson: ILesson): Promise<string | undefined> {
-    const { videoProvider, videoExternalId, videoUrl } = lesson;
+  async getStreamingUrl(lesson: ILesson | any): Promise<string | undefined> {
+    const topicVideoUrl = lesson?.topics?.[0]?.videoUrl || lesson?.topic?.videoUrl || '';
+    const videoProvider = lesson?.videoProvider;
+    const videoExternalId = lesson?.videoExternalId;
+    const videoUrl = topicVideoUrl || lesson?.videoUrl || '';
 
     if (videoProvider === 'mux') {
       return `https://stream.mux.com/${videoExternalId}.m3u8`;
